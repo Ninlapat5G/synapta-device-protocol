@@ -47,17 +47,18 @@ agent: device_call(device="bench-esp32", name="led.set", input={"on":true})
 
 เจ้าของตั้งชื่อเล่น (`bench-esp32`) ผูกกับตัวตนข้างบน เก็บในโฟลเดอร์กลาง — ตั้งจากโปรดักต์ไหนก็เห็นชื่อเดียวกัน
 
-## โครงโฟลเดอร์ (มีแล้ว: `spec/vectors/`, `crates/sdp-core/`)
+## โครงโฟลเดอร์ (มีแล้ว: `spec/vectors/`, `crates/sdp-core/`, `firmware/arduino/`, `tools/sdp-sim/`, `tools/sdp-check/`)
 
 ```
 spec/                 สเปกที่เป็นทางการ (ย้ายจาก docs/wire-format.md เมื่อนิ่ง) + test vectors (byte ที่ถูกต้องของแต่ละข้อความ)
 crates/sdp-core/      Rust: encode/decode + framing, no_std ได้, ไม่มี I/O
 crates/sdp-host/      Rust: transport, registry, จองพอร์ต, แฟลช, toolchain — Connect ลิงก์ตรง
 crates/sdp-host-bin/  โปรแกรม sdp-host: ห่อ sdp-host เป็น JSON-RPC ผ่าน stdio — SynaptaCode และ BLE ของ Connect ใช้
-firmware/arduino/     ไลบรารี Arduino (AVR, ESP32, RP2040) — header เดียว ใช้ RAM น้อย
+firmware/arduino/     ไลบรารี Arduino (AVR, ESP32) — include ไฟล์เดียว ใช้ RAM น้อย + test/ ที่รันกับ vectors บน PC
 firmware/esp-idf/     component สำหรับ ESP-IDF (เพิ่ม OTA, WiFi, BLE)
 firmware/micropython/ โมดูล Python
-tools/sdp-sim/        อุปกรณ์จำลองบน PC (serial เสมือน / TCP) ไว้เทสต์ Connect โดยไม่ต้องมีบอร์ด
+tools/sdp-sim/        อุปกรณ์จำลองบน PC (TCP) ไว้เทสต์ Connect โดยไม่ต้องมีบอร์ด
+tools/sdp-check/      ตรวจลำดับของเฟส 0 กับบอร์ดจริง (serial) หรือ sdp-sim (TCP)
 examples/             LED, เซ็นเซอร์, รีเลย์ — อย่างละไฟล์
 ```
 

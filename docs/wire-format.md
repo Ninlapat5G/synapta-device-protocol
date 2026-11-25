@@ -95,7 +95,7 @@ host ถือว่าเป็นคำตอบของคำขอที่
   เพราะ `millis()` ของ Arduino เป็น 32 บิต วนกลับเป็น 0 ทุก 49.7 วัน ถ้าใช้ uptime จะแจ้งว่า "บอร์ดรีเซ็ต" ทั้งที่ไม่ได้รีเซ็ต
 - `caps_hash` = CRC-32 (IEEE) ของ descriptor ทุกตัวที่เข้ารหัสแล้ว ต่อกันตามลำดับที่ส่ง (ในแต่ละหน้า caps ก่อน events) — ไม่ใช่เรื่องความปลอดภัย แค่บอกว่า describe ใหม่ไหม
 - describe แบ่งหน้าให้แต่ละหน้าไม่เกิน 4096 ไบต์ firmware lib ใส่ descriptor ทีละตัวต่อหน้าได้เสมอ
-  descriptor ตัวเดียวที่ใหญ่เกิน = firmware lib ต้องแจ้งตอน build ไม่ใช่ไปพังตอน describe
+  descriptor ตัวเดียวที่ใหญ่เกิน = firmware lib ต้องแจ้งตั้งแต่บอร์ดเริ่มทำงาน ไม่ใช่ไปพังตอน describe (decisions #14)
 
 ### จังหวะการคุย
 
@@ -127,8 +127,9 @@ CBOR map key เลข แปลงเป็นรูปของ Synapta Protoc
 
 Event descriptor: `0` name · `1` description · `2` data_schema
 
-**firmware เก็บ descriptor เป็น byte ที่เข้ารหัสเสร็จแล้วใน flash** (PROGMEM บน AVR) แล้วส่งออกสายตรง ๆ ไม่ประกอบใน RAM —
+**firmware เก็บ descriptor ใน flash** (PROGMEM บน AVR) แล้วส่งออกสายตรง ๆ ไม่ประกอบใน RAM —
 Uno มี RAM 2 KB descriptor สามสี่ตัวที่ประกอบใน RAM ก็กินหมดแล้ว
+(ไลบรารี Arduino เก็บ schema เป็น JSON แล้วแปลงเป็น CBOR ระหว่างส่ง — decisions #14)
 
 ## Schema (decisions #11)
 

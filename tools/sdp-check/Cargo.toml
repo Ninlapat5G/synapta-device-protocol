@@ -1,0 +1,16 @@
+[package]
+name = "sdp-check"
+description = "Phase-0 smoke test: talks SDP to a real board over USB serial or to sdp-sim over TCP"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdp-core = { path = "../../crates/sdp-core" }
+getrandom = { version = "0.2", features = ["std"] }
+serialport = { version = "4", default-features = false }
+
+[dev-dependencies]
+sdp-sim = { path = "../sdp-sim" }

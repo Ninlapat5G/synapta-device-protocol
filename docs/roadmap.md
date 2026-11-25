@@ -4,11 +4,15 @@
 
 1. ~~ตัดสินคำถามใน wire-format.md~~ — เสร็จ 2026-11-25 (decisions #10–#12)
 2. ~~เขียน test vectors~~ — เสร็จ 2026-11-25 ที่ `spec/vectors/` (สร้างด้วย `generate.py`)
-3. ~~`crates/sdp-core` ผ่าน test vectors~~ — เสร็จ 2026-11-25 (`cargo test`) **เริ่มที่ข้อ 4**
+3. ~~`crates/sdp-core` ผ่าน test vectors~~ — เสร็จ 2026-11-25 (`cargo test`)
 4. `firmware/arduino` ตัวแรก (ESP32 + Uno) ผ่าน test vectors และรันตัวอย่าง LED ได้จริง
-5. `tools/sdp-sim` จำลองอุปกรณ์บน TCP ให้เทสต์ host ได้โดยไม่มีบอร์ด
+   — โค้ดเสร็จ 2026-11-25: ผ่าน vectors บน PC (`firmware/arduino/test/run_vectors.py`) และคอมไพล์ Uno/ESP32 ผ่าน
+   **ยังไม่ได้ลองบนบอร์ดจริง**
+5. ~~`tools/sdp-sim` จำลองอุปกรณ์บน TCP ให้เทสต์ host ได้โดยไม่มีบอร์ด~~ — เสร็จ 2026-11-25
+   พร้อม `tools/sdp-check` ที่รันลำดับข้างล่างได้ทั้งกับบอร์ดจริงและ sdp-sim
 
 **เสร็จเมื่อ:** PC คุยกับ ESP32 จริงผ่าน USB ด้วยสคริปต์ทดสอบ: hello → describe → call → event → ping หาย → `on_link_lost` ทำงาน
+— สคริปต์คือ `sdp-check --serial COMx` (ผ่านกับ sdp-sim แล้ว) **เหลือรันกับ ESP32 ที่แฟลช LedDemo**
 
 ## เฟส 1 — `sdp-host`: USB + แฟลชผ่านสาย + toolchain
 

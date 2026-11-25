@@ -16,6 +16,9 @@ python spec/vectors/generate.py     # ต้องมี cryptography (pip insta
 | `decode.json` | กฎฝั่งผู้รับ: key สลับลำดับ, key ไม่รู้จัก, float 16/64, indefinite length, body ผิดรูป | `ok` → ต้องเท่ากับข้อความ `same_as`; `error` → รหัสที่ต้องตอบ และ `reply_id` |
 | `crypto.json` | `key_proof`, session key, เฟรม AES-CCM, กันเล่นซ้ำ | ป้อน `device_receive_sequence` ตามลำดับเข้าผู้รับตัวเดียว |
 
+**ผู้ใช้ตอนนี้:** `crates/sdp-core/tests/vectors.rs` (ครบทุกไฟล์) และ `firmware/arduino/test/run_vectors.py`
+(ข้าม `crypto.json` จนกว่า firmware จะมีลิงก์ไร้สาย — เฟส 2)
+
 **เทสต์ต้องครอบทุกชื่อ:** ให้วนทุกรายการในไฟล์ แล้วตกเมื่อเจอชื่อที่เทสต์ไม่รู้จัก vector ใหม่จะได้ไม่ถูกข้ามเงียบ ๆ
 
 `refimpl.py` เป็นตัวอ้างอิงที่ใช้สร้าง vector เท่านั้น ตรวจกับค่าที่รู้คำตอบ (RFC 8949, check value ของ CRC,

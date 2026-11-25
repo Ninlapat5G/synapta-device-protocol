@@ -3,12 +3,25 @@
 โปรโตคอลให้ AI agent สั่งงาน อ่านค่า และอัปโค้ดลงอุปกรณ์ที่ **ไม่มี OS** (MCU: ESP32, Arduino, STM32, RP2040 …)
 ผ่านสาย USB / RS232 / RS485 หรือไร้สาย WiFi / Bluetooth
 
-> สถานะ (2026-11-25): สเปก v1 + test vectors + `crates/sdp-core` ผ่านเทสต์แล้ว
-> งานถัดไป: [`docs/roadmap.md`](docs/roadmap.md) เฟส 0 ข้อ 4 — ไลบรารี Arduino ที่ผ่าน vectors ชุดเดียวกัน
+> สถานะ (2026-11-25): เฟส 0 เขียนครบแล้ว — สเปก v1, test vectors, `crates/sdp-core`, ไลบรารี Arduino, `sdp-sim`, `sdp-check`
+> **ยังเหลือ:** ทดสอบกับ ESP32 ตัวจริงผ่าน USB (`sdp-check --serial COMx`) ซึ่งเป็นเกณฑ์ปิดเฟส 0 — ดู [roadmap](docs/roadmap.md)
+
+| ส่วน | อยู่ที่ | คืออะไร |
+|---|---|---|
+| `sdp-core` | `crates/sdp-core/` | Rust: CBOR, เฟรม, ข้อความ, การเข้ารหัส — ไม่มี I/O, no_std ได้ |
+| SynaptaDevice | `firmware/arduino/SynaptaDevice/` | ไลบรารี Arduino (Uno, ESP32) ให้บอร์ดพูด SDP — [วิธีใช้](firmware/arduino/SynaptaDevice/README.md) |
+| `sdp-sim` | `tools/sdp-sim/` | อุปกรณ์จำลองบน TCP (ตอบเหมือนตัวอย่าง LedDemo) ไว้เทสต์ host โดยไม่มีบอร์ด |
+| `sdp-check` | `tools/sdp-check/` | ตรวจลำดับเฟส 0 กับบอร์ดจริง (serial) หรือ `sdp-sim` (TCP) |
 
 ```
-cargo test                          # sdp-core กับ spec/vectors ทั้งหมด
-python spec/vectors/generate.py     # สร้าง vectors ใหม่หลังแก้สเปก
+cargo test                                   # sdp-core + sdp-check คุยกับ sdp-sim ทั้งแบบเข้ารหัสและไม่เข้ารหัส
+cargo clippy --workspace --all-targets -- -D warnings
+python firmware/arduino/test/run_vectors.py  # ไลบรารี Arduino กับ spec/vectors (คอมไพล์ด้วย MSVC บน PC)
+python spec/vectors/generate.py              # สร้าง vectors ใหม่หลังแก้สเปก
+
+cargo run -p sdp-sim                         # อุปกรณ์จำลองที่ 127.0.0.1:7878 (กด Enter = กดปุ่ม)
+cargo run -p sdp-check -- --tcp 127.0.0.1:7878
+cargo run -p sdp-check -- --serial COM5      # บอร์ดจริงที่แฟลช examples/LedDemo (Uno: เติม --reset dtr)
 ```
 
 ## ทำไมต้องมี

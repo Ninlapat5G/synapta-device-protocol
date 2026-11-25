@@ -1,0 +1,12 @@
+[package]
+name = "sdp-sim"
+description = "Simulated SDP device over TCP (the LedDemo example board) for testing hosts without hardware"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+sdp-core = { path = "../../crates/sdp-core" }
+getrandom = { version = "0.2", features = ["std"] }

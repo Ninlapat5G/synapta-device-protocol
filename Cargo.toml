@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/sdp-core"]
+members = ["crates/sdp-core", "tools/sdp-sim", "tools/sdp-check"]
 resolver = "2"
 
 [workspace.package]
