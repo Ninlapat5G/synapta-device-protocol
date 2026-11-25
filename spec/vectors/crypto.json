@@ -1,0 +1,64 @@
+{
+  "spec": "SDP v1 (docs/wire-format.md)",
+  "psk": "000102030405060708090a0b0c0d0e0f",
+  "host_nonce": "0102030405060708",
+  "dev_nonce": "1112131415161718",
+  "key_proof": "bbbeda65f96dec76",
+  "session_key": "79b34367facff6cfbedae1087dcfcf33",
+  "frames": [
+    {
+      "name": "host_to_dev_call",
+      "direction": 0,
+      "counter": 1,
+      "plain_body": "830504a200676c65642e73657401a1626f6ef5",
+      "inner": "0100000001bc16ed5928bb7e048c9118ce08ce2d2bd1da15a0d2c97652ee5743",
+      "serial": "00020101011f01bc16ed5928bb7e048c9118ce08ce2d2bd1da15a0d2c97652ee5743c3c000",
+      "tcp": "00200100000001bc16ed5928bb7e048c9118ce08ce2d2bd1da15a0d2c97652ee5743"
+    },
+    {
+      "name": "dev_to_host_result",
+      "direction": 1,
+      "counter": 1,
+      "plain_body": "830604a100a1626f6ef5",
+      "inner": "010000000194bf0036c992ef60513c39be12af1b6d823c"
+    }
+  ],
+  "device_receive_sequence": [
+    {
+      "name": "counter_1",
+      "inner": "0100000001bc16ed5928bb7e048c9118ce08ce2d2bd1da15a0d2c97652ee5743",
+      "ok": "830504a200676c65642e73657401a1626f6ef5"
+    },
+    {
+      "name": "counter_2",
+      "inner": "0100000002331911f0938b22978b77a5ba",
+      "ok": "830908a0"
+    },
+    {
+      "name": "replay_counter_2",
+      "inner": "0100000002331911f0938b22978b77a5ba",
+      "drop": "replay"
+    },
+    {
+      "name": "replay_counter_1",
+      "inner": "0100000001bc16ed5928bb7e048c9118ce08ce2d2bd1da15a0d2c97652ee5743",
+      "drop": "replay"
+    },
+    {
+      "name": "tampered_tag_counter_3",
+      "inner": "0100000003869a459431db97840dbc124f",
+      "drop": "auth_failed"
+    },
+    {
+      "name": "reflected_direction",
+      "inner": "0100000003ca9a72a40d2e3e09af0859af",
+      "drop": "auth_failed"
+    },
+    {
+      "name": "genuine_counter_3_after_failures",
+      "inner": "0100000003869a459431db97840dbc124e",
+      "ok": "830908a0"
+    }
+  ],
+  "note": "inner = flags | counter | ciphertext | tag; device_receive_sequence ป้อนตามลำดับเข้าอุปกรณ์ตัวเดียว — เฟรมที่ถอดไม่ผ่านต้องไม่ขยับ counter ไม่งั้นผู้โจมตีส่งเฟรมปลอม counter สูง ๆ แล้วเฟรมจริงถูกทิ้งหมด"
+}

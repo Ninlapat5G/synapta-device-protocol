@@ -1,0 +1,127 @@
+{
+  "spec": "SDP v1 (docs/wire-format.md)",
+  "note": "same_as = ถอดแล้วต้องได้ค่าเท่ากับข้อความชื่อนั้นใน messages.json; error = รหัสที่อุปกรณ์ตอบ, reply_id = id ที่ใส่ในคำตอบ (0 เมื่ออ่าน id ไม่ได้)",
+  "cases": [
+    {
+      "name": "keys_out_of_order",
+      "body": "830101a403480102030405060708026b53796e61707461436f646501010001",
+      "expect": "ok",
+      "same_as": "hello"
+    },
+    {
+      "name": "unknown_key_skipped",
+      "body": "830101a500010101026b53796e61707461436f6465034801020304050607081863a16178820102",
+      "expect": "ok",
+      "same_as": "hello"
+    },
+    {
+      "name": "non_shortest_int",
+      "body": "831809190008a0",
+      "expect": "ok",
+      "same_as": "ping"
+    },
+    {
+      "name": "float16_value",
+      "body": "830605a100a16763656c73697573f94de0",
+      "expect": "ok",
+      "same_as": "result_temp_read"
+    },
+    {
+      "name": "float64_value",
+      "body": "830605a100a16763656c73697573fb4037800000000000",
+      "expect": "ok",
+      "same_as": "result_temp_read"
+    },
+    {
+      "name": "unknown_message_type",
+      "body": "83186307a0",
+      "expect": "error",
+      "error": 7,
+      "reply_id": 7
+    },
+    {
+      "name": "unknown_type_with_bad_m",
+      "body": "8318630780",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 7
+    },
+    {
+      "name": "missing_required_field",
+      "body": "830504a101a1626f6ef5",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 4
+    },
+    {
+      "name": "indefinite_array",
+      "body": "9f0908a0ff",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 0
+    },
+    {
+      "name": "indefinite_map",
+      "body": "830908bfff",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 8
+    },
+    {
+      "name": "indefinite_text_in_call",
+      "body": "830504a1007f636c6564642e736574ff",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 4
+    },
+    {
+      "name": "array_of_two",
+      "body": "820908",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 0
+    },
+    {
+      "name": "not_an_array",
+      "body": "a10009",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 0
+    },
+    {
+      "name": "type_is_text",
+      "body": "836470696e6708a0",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 0
+    },
+    {
+      "name": "id_over_16_bits",
+      "body": "83091a00010000a0",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 0
+    },
+    {
+      "name": "m_not_a_map",
+      "body": "83090880",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 8
+    },
+    {
+      "name": "truncated",
+      "body": "830101a400010101026b53796e61707461436f646503480102030405",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 1
+    },
+    {
+      "name": "trailing_byte",
+      "body": "830908a000",
+      "expect": "error",
+      "error": 3,
+      "reply_id": 8
+    }
+  ]
+}

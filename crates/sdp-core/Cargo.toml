@@ -1,0 +1,21 @@
+[package]
+name = "sdp-core"
+description = "SDP v1: CBOR, framing, messages and link encryption — no I/O, no_std"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["crypto"]
+crypto = ["dep:aes", "dep:ccm", "dep:hmac", "dep:sha2"]
+
+[dependencies]
+aes = { version = "0.8", default-features = false, optional = true }
+ccm = { version = "0.5", default-features = false, optional = true }
+hmac = { version = "0.12", default-features = false, optional = true }
+sha2 = { version = "0.10", default-features = false, optional = true }
+
+[dev-dependencies]
+serde_json = "1"

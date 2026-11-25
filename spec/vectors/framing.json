@@ -1,0 +1,259 @@
+{
+  "spec": "SDP v1 (docs/wire-format.md)",
+  "crc16_ccitt_false": [
+    {
+      "data": "313233343536373839",
+      "crc": "29b1"
+    },
+    {
+      "data": "",
+      "crc": "ffff"
+    },
+    {
+      "data": "00830908a0",
+      "crc": "f53a"
+    }
+  ],
+  "crc32": [
+    {
+      "data": "313233343536373839",
+      "crc": "cbf43926"
+    }
+  ],
+  "cobs": [
+    {
+      "raw": "00",
+      "encoded": "0101"
+    },
+    {
+      "raw": "0000",
+      "encoded": "010101"
+    },
+    {
+      "raw": "001100",
+      "encoded": "01021101"
+    },
+    {
+      "raw": "11220033",
+      "encoded": "0311220233"
+    },
+    {
+      "raw": "11223344",
+      "encoded": "0511223344"
+    },
+    {
+      "raw": "11000000",
+      "encoded": "0211010101"
+    },
+    {
+      "raw": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe",
+      "encoded": "ff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe"
+    },
+    {
+      "raw": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe",
+      "encoded": "01ff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe"
+    },
+    {
+      "raw": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+      "encoded": "ff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe02ff"
+    },
+    {
+      "raw": "02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00",
+      "encoded": "ff02030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0101"
+    },
+    {
+      "raw": "030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0001",
+      "encoded": "fe030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0201"
+    }
+  ],
+  "serial_streams": [
+    {
+      "name": "single_frame",
+      "max_frame": 128,
+      "stream": "000107830908a0f53a00",
+      "events": [
+        {
+          "frame": "00830908a0"
+        }
+      ],
+      "pending_bytes": 0
+    },
+    {
+      "name": "two_frames_back_to_back",
+      "max_frame": 128,
+      "stream": "000107830908a0f53a00000105830101a41d010101026b53796e61707461436f646503480102030405060708d72000",
+      "events": [
+        {
+          "frame": "00830908a0"
+        },
+        {
+          "frame": "00830101a400010101026b53796e61707461436f646503480102030405060708"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "0x00 ติดกันสองตัวระหว่างเฟรม = ท่อนว่าง ข้าม"
+    },
+    {
+      "name": "log_then_frame",
+      "max_frame": 128,
+      "stream": "626f6f74206f6b0d0a000107830908a0f53a00",
+      "events": [
+        {
+          "drop": "cobs_invalid",
+          "raw": "626f6f74206f6b0d0a"
+        },
+        {
+          "frame": "00830908a0"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "log จาก Serial.println แยกออกเพราะผู้ส่งใส่ 0x00 หน้าเฟรม"
+    },
+    {
+      "name": "log_glued_without_leading_zero",
+      "max_frame": 128,
+      "stream": "626f6f74206f6b0d0a0107830908a0f53a00",
+      "events": [
+        {
+          "drop": "cobs_invalid",
+          "raw": "626f6f74206f6b0d0a0107830908a0f53a"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "ผู้ส่งที่ไม่ใส่ 0x00 หน้าเฟรม — เฟรมจริงหายไปกับ log (เหตุที่สเปกบังคับ 0x00 หน้าเฟรม)"
+    },
+    {
+      "name": "crc_mismatch",
+      "max_frame": 128,
+      "stream": "000107830908a0f53b00",
+      "events": [
+        {
+          "drop": "crc_mismatch",
+          "raw": "0107830908a0f53b"
+        }
+      ],
+      "pending_bytes": 0
+    },
+    {
+      "name": "cut_mid_then_good",
+      "max_frame": 128,
+      "stream": "000105830101a41d010101026b53796e6170000107830908a0f53a00",
+      "events": [
+        {
+          "drop": "cobs_invalid",
+          "raw": "0105830101a41d010101026b53796e6170"
+        },
+        {
+          "frame": "00830908a0"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "ท่อนที่ขาดถูกทิ้ง เฟรมถัดไปต้องรับได้"
+    },
+    {
+      "name": "incomplete_at_end",
+      "max_frame": 128,
+      "stream": "000107830908a0f53a00000105830101a41d010101026b53796e61707461436f646503480102030405060708d720",
+      "events": [
+        {
+          "frame": "00830908a0"
+        }
+      ],
+      "pending_bytes": 35,
+      "note": "ยังไม่เจอ 0x00 ปิดท้าย = รอต่อ ไม่ใช่ทิ้ง"
+    },
+    {
+      "name": "too_short",
+      "max_frame": 128,
+      "stream": "0003aabb00",
+      "events": [
+        {
+          "drop": "too_short",
+          "raw": "03aabb"
+        }
+      ],
+      "pending_bytes": 0
+    },
+    {
+      "name": "max_frame_exact",
+      "max_frame": 128,
+      "stream": "000182555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555552a3100",
+      "events": [
+        {
+          "frame": "0055555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "ยาวพอดี max_frame รับได้"
+    },
+    {
+      "name": "max_frame_plus_one",
+      "max_frame": 128,
+      "stream": "0001835555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555be7800",
+      "events": [
+        {
+          "drop": "too_large"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "เกินหนึ่งไบต์ ทิ้ง"
+    },
+    {
+      "name": "reserved_flag",
+      "max_frame": 128,
+      "stream": "000804830908a07c3c00",
+      "events": [
+        {
+          "drop": "reserved_flag",
+          "raw": "0804830908a07c3c"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "bit 2 ของ flags"
+    },
+    {
+      "name": "only_delimiters",
+      "max_frame": 128,
+      "stream": "000000",
+      "events": [],
+      "pending_bytes": 0
+    },
+    {
+      "name": "rs485_addr",
+      "max_frame": 128,
+      "stream": "00090205830908a0423100",
+      "events": [
+        {
+          "frame": "0205830908a0"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "flags bit 1 + addr 5 — framing ไม่แกะ addr"
+    },
+    {
+      "name": "encrypted_flag_passes_framing",
+      "max_frame": 128,
+      "stream": "0018010102030405060708090a0b0c0d0e0f101112131408fc00",
+      "events": [
+        {
+          "frame": "010102030405060708090a0b0c0d0e0f1011121314"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "framing ไม่ถอดรหัส ส่งต่อให้ชั้นถัดไป"
+    },
+    {
+      "name": "long_frame_cobs_blocks",
+      "max_frame": 512,
+      "stream": "0001ff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfe2fff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d01350102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132ec3900",
+      "events": [
+        {
+          "frame": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d00000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132"
+        }
+      ],
+      "pending_bytes": 0,
+      "note": "ข้ามขอบบล็อก COBS 254 ไบต์"
+    }
+  ],
+  "note": "เหตุการณ์ frame = flags | [addr] | body; drop.raw = ท่อนก่อนถอด COBS (host เก็บเป็น console log)"
+}
