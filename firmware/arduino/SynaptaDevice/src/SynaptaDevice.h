@@ -28,7 +28,7 @@
 #include "sdp/frame_tx.h"
 #include "sdp/schema.h"
 
-#define SYNAPTA_DEVICE_VERSION "0.1.0"
+#define SYNAPTA_DEVICE_VERSION "0.2.0"
 
 enum class SdpDanger : uint8_t { None = 0, Actuator = 1, Destructive = 2 };
 #define SDP_NONE SdpDanger::None
