@@ -240,7 +240,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "sdp-check"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "getrandom",
  "sdp-core",
@@ -250,7 +250,7 @@ dependencies = [
 
 [[package]]
 name = "sdp-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes",
  "ccm",
@@ -261,7 +261,7 @@ dependencies = [
 
 [[package]]
 name = "sdp-sim"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "getrandom",
  "sdp-core",

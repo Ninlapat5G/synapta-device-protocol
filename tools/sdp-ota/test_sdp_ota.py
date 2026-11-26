@@ -11,24 +11,57 @@ import sdp_ota as ota
 
 
 class TestUpload(unittest.TestCase):
-    def test_wifi_only_does_not_generate_or_send_a_pairing_key(self):
+    def test_wifi_only_does_not_request_or_store_the_board_secret(self):
         with tempfile.TemporaryDirectory() as temp:
             wifi = Path(temp) / "wifi.json"
             wifi.write_text(json.dumps({"ssid": "test-network", "password": "test-password"}), encoding="utf-8")
             connection = io.BytesIO()
-            args = argparse.Namespace(wifi_config=wifi, port="COM3", device_id=None, mode="sta")
+            args = argparse.Namespace(wifi_config=wifi, ssid=None, port="COM3", device_id=None, mode="sta")
             with (
                 patch.object(ota, "serial_port", return_value=contextlib.nullcontext(connection)),
                 patch.object(ota, "usb_info", return_value={"deviceId": "a" * 16}),
-                patch.object(ota, "usb_read", return_value={"provisioned": True}),
-                patch.object(ota, "read_key") as read_key,
+                patch.object(ota, "usb_read", return_value={"provisioned": True, "deviceId": "a" * 16}),
+                patch.object(ota, "write_key") as write_key,
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 self.assertEqual(ota.provision(args, wifi_only=True), 0)
-            read_key.assert_not_called()
+            write_key.assert_not_called()
             prefix, payload = connection.getvalue().split(b" ", 1)
             self.assertEqual(prefix, b"SDP-WIFI")
             self.assertEqual(json.loads(payload), {"mode": "sta", "ssid": "test-network", "password": "test-password"})
+
+    def test_pairing_stores_the_board_secret_by_device_id_and_never_prints_it(self):
+        secret = "ab" * 32
+        with tempfile.TemporaryDirectory() as temp:
+            connection = io.BytesIO()
+            args = argparse.Namespace(wifi_config=None, ssid=None, port="COM3", device_id=None, mode="sta",
+                                      key_file=None, key_dir=Path(temp) / "keys")
+            output = io.StringIO()
+            with (
+                patch.object(ota, "serial_port", return_value=contextlib.nullcontext(connection)),
+                patch.object(ota, "usb_info", return_value={"deviceId": "a" * 16}),
+                patch.object(ota, "usb_read", return_value={"provisioned": True, "deviceId": "a" * 16, "secret": secret}),
+                contextlib.redirect_stdout(output),
+            ):
+                self.assertEqual(ota.provision(args), 0)
+            # Pair-only: no Wi-Fi fields are sent, so the board keeps its network.
+            self.assertEqual(connection.getvalue(), b"SDP-PROVISION {}\n")
+            key = Path(temp) / "keys" / ("a" * 16 + ".txt")
+            self.assertEqual(ota.read_key(key), bytes.fromhex(secret))
+            self.assertNotIn(secret, output.getvalue())
+
+    def test_pairing_rejects_firmware_without_a_board_secret(self):
+        with tempfile.TemporaryDirectory() as temp:
+            args = argparse.Namespace(wifi_config=None, ssid=None, port="COM3", device_id=None, mode="sta",
+                                      key_file=Path(temp) / "key.txt", key_dir=None)
+            with (
+                patch.object(ota, "serial_port", return_value=contextlib.nullcontext(io.BytesIO())),
+                patch.object(ota, "usb_info", return_value={"deviceId": "a" * 16}),
+                patch.object(ota, "usb_read", return_value={"provisioned": True, "deviceId": "a" * 16}),
+                self.assertRaises(ota.OtaError),
+            ):
+                ota.provision(args)
+            self.assertFalse((Path(temp) / "key.txt").exists())
 
     def test_signed_reply_cannot_be_reused_for_another_request(self):
         key = bytes(range(16))
@@ -97,6 +130,46 @@ class TestUpload(unittest.TestCase):
 
             with image.open("rb") as stream, self.assertRaises(ota.OtaError):
                 ota.validate_image(stream, "project", "other")
+
+
+class TestShell(unittest.TestCase):
+    def test_image_identity_reads_ids_and_rejects_foreign_images(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "app.bin"
+            descriptor = b"SDPOTA1\0" + b"project".ljust(ota.ID_LENGTH, b"\0") + b"build-7".ljust(ota.ID_LENGTH, b"\0")
+            image.write_bytes(bytes(ota.APP_DESC_OFFSET) + descriptor)
+            self.assertEqual(ota.image_identity(image), ("project", "build-7"))
+            image.write_bytes(bytes(ota.APP_DESC_OFFSET + 300))
+            with self.assertRaises(ota.OtaError):
+                ota.image_identity(image)
+
+    def test_a_second_board_cannot_take_over_an_existing_pairing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            key = Path(temp) / ("a" * 16 + ".txt")
+            ota.write_key(key, "ab" * 32)
+            ota.write_key(key, "ab" * 32)  # re-pairing the same board is fine
+            with self.assertRaises(ota.OtaError):
+                ota.write_key(key, "cd" * 32)
+            self.assertEqual(ota.read_key(key), bytes.fromhex("ab" * 32))
+
+    def test_firmware_files_resolve_in_a_flat_zip_by_name(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            flasher = {"flash_files": {"0x10000": "sdp_ota.bin", "0x1000": "bootloader/bootloader.bin"},
+                       "app": {"file": "sdp_ota.bin"}, "extra_esptool_args": {"chip": "esp32"}}
+            (root / "flasher_args.json").write_text(json.dumps(flasher), encoding="utf-8")
+            (root / "sdp_ota.bin").write_bytes(b"app")
+            (root / "bootloader.bin").write_bytes(b"boot")
+            _, files, app = ota.firmware_files(root)
+            self.assertEqual([(offset, path.name) for offset, path in files], [("0x1000", "bootloader.bin"), ("0x10000", "sdp_ota.bin")])
+            self.assertEqual(app.name, "sdp_ota.bin")
+
+    def test_short_status_finds_the_address_and_key_by_device_id(self):
+        args = argparse.Namespace(host=None, port=52410, device_id="a" * 16, key_file=None, key_dir=Path("keys"))
+        board = {"deviceId": "a" * 16, "projectId": "p", "paired": True, "address": "192.0.2.9", "port": 52410}
+        with patch.object(ota, "find_boards", return_value={"a" * 16: board}):
+            ota.resolve_board(args)
+        self.assertEqual((args.host, args.key_file), ("192.0.2.9", Path("keys") / ("a" * 16 + ".txt")))
 
 
 if __name__ == "__main__":

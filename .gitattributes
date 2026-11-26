@@ -1,0 +1,3 @@
+# The POSIX wrapper breaks with CRLF (its shebang line would end in a carriage return); the Windows one wants CRLF.
+tools/sdp-ota/sdpo text eol=lf
+*.cmd text eol=crlf

@@ -1,0 +1,3 @@
+#!/bin/sh
+# SDP firmware tool for Linux and macOS (sdpo.cmd on Windows). See `./sdpo --help`.
+exec python3 -I -B "$(dirname "$0")/sdp_ota.py" "$@"

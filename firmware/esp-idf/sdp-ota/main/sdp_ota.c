@@ -10,15 +10,20 @@
 #include "esp_app_format.h"
 #include "esp_event.h"
 #include "esp_check.h"
+#include "bootloader_random.h"
+#include "esp_flash.h"
 #include "esp_http_server.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_random.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "lwip/sockets.h"
 #include "mbedtls/constant_time.h"
 #include "mbedtls/md.h"
 #include "mbedtls/sha256.h"
@@ -27,9 +32,10 @@
 #define ID_SIZE 97
 #define NONCE_SIZE 33
 #define HASH_SIZE 65
-#define KEY_BYTES 16
+#define SECRET_BYTES 32
 #define NETWORK_READY BIT0
 #define HTTP_PORT 52410
+#define DISCOVERY_PORT 52404
 #define URGENT_BOOT_MS 45000
 
 typedef struct {
@@ -42,8 +48,8 @@ const __attribute__((section(".rodata_custom_desc"))) app_identity_t sdp_app_des
     "SDPOTA1", SDP_PROJECT_ID, SDP_BUILD_ID
 };
 
+// Wi-Fi settings only. The pairing secret lives in the identity namespace and never changes.
 typedef struct {
-    uint8_t key[KEY_BYTES];
     char mode[4];
     char ssid[33];
     char password[65];
@@ -58,6 +64,8 @@ typedef struct {
 static provision_t config;
 static attempt_t attempt;
 static nvs_handle_t identity_store, ota_store;
+static uint8_t secret[SECRET_BYTES];
+static bool paired;
 static char device_id[17], boot_id[NONCE_SIZE], challenge[NONCE_SIZE];
 static _Atomic(const char *) boot_state = "confirmed";
 static EventGroupHandle_t network_events;
@@ -95,7 +103,7 @@ static bool authenticate(const char *message, const char *provided)
     uint8_t raw[32];
     char expected[HASH_SIZE];
     if (!is_hex(provided, HASH_SIZE - 1) ||
-        mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), config.key, sizeof(config.key),
+        mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), secret, sizeof(secret),
                         (const uint8_t *)message, strlen(message), raw)) {
         return false;
     }
@@ -109,7 +117,7 @@ static esp_err_t signed_response(httpd_req_t *req, const char *nonce, int code, 
     uint8_t raw[32];
     int count = snprintf(message, sizeof(message), "response\n%s\n%d\n%s", nonce, code, body);
     if (count < 0 || count >= sizeof(message) ||
-        mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), config.key, sizeof(config.key),
+        mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), secret, sizeof(secret),
                         (const uint8_t *)message, count, raw)) {
         return ESP_FAIL;
     }
@@ -341,53 +349,68 @@ static esp_err_t start_wifi(void)
     return ESP_OK;
 }
 
+// Answers {"probe":"synapta-sdp"} on UDP 52404 so hosts can list boards without typing an address.
+// The reply holds only identity and pairing state; status and builds stay behind the HMAC endpoint.
+static void discovery_task(void *unused)
+{
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(DISCOVERY_PORT),
+                                .sin_addr.s_addr = htonl(INADDR_ANY)};
+    if (sock < 0 || bind(sock, (struct sockaddr *)&local, sizeof(local)) < 0) {
+        vTaskDelete(NULL);
+    }
+    char probe[64], beacon[256];
+    int length = snprintf(beacon, sizeof(beacon), "{\"protocol\":\"sdp/v1\",\"deviceId\":\"%s\","
+                          "\"projectId\":\"%s\",\"paired\":%s,\"port\":%d}",
+                          device_id, SDP_PROJECT_ID, paired ? "true" : "false", HTTP_PORT);
+    for (;;) {
+        struct sockaddr_in from;
+        socklen_t from_size = sizeof(from);
+        int got = recvfrom(sock, probe, sizeof(probe) - 1, 0, (struct sockaddr *)&from, &from_size);
+        if (got <= 0) {
+            continue;
+        }
+        probe[got] = '\0';
+        if (!strcmp(probe, "{\"probe\":\"synapta-sdp\"}")) {
+            sendto(sock, beacon, length, 0, (struct sockaddr *)&from, from_size);
+        }
+    }
+}
+
 static void usb_reply(const char *text)
 {
     uart_write_bytes(UART_NUM_0, text, strlen(text));
 }
 
-static bool has_pairing_key(const provision_t *settings)
-{
-    const uint8_t empty[KEY_BYTES] = {0};
-    return memcmp(settings->key, empty, sizeof(empty)) != 0;
-}
-
-static bool provision(const char *json, bool wifi_only)
+// Stores Wi-Fi settings from JSON. Fields are optional for SDP-PROVISION (pair only, keep the network).
+static bool save_wifi(const char *json, bool required)
 {
     cJSON *root = cJSON_ParseWithOpts(json, NULL, true);
     const char *mode = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root, "mode"));
     const char *ssid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root, "ssid"));
     const char *pwd = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root, "password"));
-    const char *key = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(root, "key"));
-    provision_t next = {0};
-    bool okay = mode && (!strcmp(mode, "ap") || !strcmp(mode, "sta")) &&
-        ssid && strlen(ssid) && strlen(ssid) <= 32 &&
-        pwd && strlen(pwd) >= 8 && strlen(pwd) <= 63 &&
-        (wifi_only ? !cJSON_HasObjectItem(root, "key") : key && is_hex(key, KEY_BYTES * 2));
-    if (okay) {
-        strcpy(next.mode, mode);
-        strcpy(next.ssid, ssid);
-        strcpy(next.password, pwd);
-        if (wifi_only) {
-            provision_t previous;
-            size_t size = sizeof(previous);
-            esp_err_t loaded = nvs_get_blob(ota_store, "network", &previous, &size);
-            if (loaded == ESP_OK && size == sizeof(previous)) {
-                memcpy(next.key, previous.key, sizeof(next.key));
-            } else if (loaded != ESP_ERR_NVS_NOT_FOUND) {
-                okay = false;
-            }
-        } else {
-            for (size_t i = 0; i < sizeof(next.key); ++i) {
-                next.key[i] = (hex_digit(key[2 * i]) << 4) | hex_digit(key[2 * i + 1]);
-            }
-            okay = has_pairing_key(&next);
+    bool okay = root != NULL;
+    if (okay && (required || ssid)) {
+        provision_t next = {0};
+        okay = mode && (!strcmp(mode, "ap") || !strcmp(mode, "sta")) &&
+            ssid && strlen(ssid) && strlen(ssid) <= 32 &&
+            pwd && strlen(pwd) >= 8 && strlen(pwd) <= 63;
+        if (okay) {
+            strcpy(next.mode, mode);
+            strcpy(next.ssid, ssid);
+            strcpy(next.password, pwd);
+            okay = nvs_set_blob(ota_store, "wifi", &next, sizeof(next)) == ESP_OK && nvs_commit(ota_store) == ESP_OK;
         }
-        okay = okay && nvs_set_blob(ota_store, "network", &next, sizeof(next)) == ESP_OK &&
-               nvs_commit(ota_store) == ESP_OK;
     }
     cJSON_Delete(root);
     return okay;
+}
+
+// Physical USB access is the trust boundary: pairing hands the board's own secret to the host.
+static bool pair_over_usb(void)
+{
+    paired = true;
+    return nvs_set_u8(identity_store, "paired", 1) == ESP_OK && nvs_commit(identity_store) == ESP_OK;
 }
 
 static void usb_task(void *unused)
@@ -419,12 +442,23 @@ static void usb_task(void *unused)
             snprintf(out, sizeof(out), "SDP-USB {\"deviceId\":\"%s\",\"projectId\":\"%s\","
                      "\"runningBuildId\":\"%s\",\"bootState\":\"%s\",\"ipv4\":\"" IPSTR "\",\"paired\":%s}\n",
                      device_id, SDP_PROJECT_ID, SDP_BUILD_ID, boot_state, IP2STR(&ip.ip),
-                     has_pairing_key(&config) ? "true" : "false");
+                     paired ? "true" : "false");
             usb_reply(out);
         } else if (!overflow && (!strncmp(line, "SDP-PROVISION ", 14) || !strncmp(line, "SDP-WIFI ", 9))) {
+            // SDP-WIFI changes the network only; SDP-PROVISION also pairs and returns the secret.
             const bool wifi_only = !strncmp(line, "SDP-WIFI ", 9);
-            if (provision(line + (wifi_only ? 9 : 14), wifi_only)) {
-                usb_reply("SDP-USB {\"provisioned\":true}\n");
+            if (save_wifi(line + (wifi_only ? 9 : 14), wifi_only) && (wifi_only || pair_over_usb())) {
+                char out[192], hex[2 * SECRET_BYTES + 1];
+                to_hex(secret, sizeof(secret), hex);
+                if (wifi_only) {
+                    snprintf(out, sizeof(out), "SDP-USB {\"provisioned\":true,\"deviceId\":\"%s\"}\n", device_id);
+                } else {
+                    snprintf(out, sizeof(out), "SDP-USB {\"provisioned\":true,\"deviceId\":\"%s\",\"secret\":\"%s\"}\n",
+                             device_id, hex);
+                }
+                usb_reply(out);
+                memset(out, 0, sizeof(out));
+                memset(hex, 0, sizeof(hex));
                 uart_wait_tx_done(UART_NUM_0, pdMS_TO_TICKS(300));
                 esp_restart();
             }
@@ -436,20 +470,86 @@ static void usb_task(void *unused)
     }
 }
 
+// Hardware fingerprint: SHA-256 of the factory MAC and the SPI flash unique ID, whichever can be read.
+// Cloned or damaged boards may have a blank, duplicated or unreadable MAC, so neither source is required.
+// Returns false when neither can be read.
+static bool hardware_fingerprint(uint8_t digest[32])
+{
+    uint8_t mac[6];
+    uint64_t flash_id = 0;
+    const bool has_mac = esp_efuse_mac_get_default(mac) == ESP_OK;
+    const bool has_flash = esp_flash_read_unique_chip_id(esp_flash_default_chip, &flash_id) == ESP_OK && flash_id != 0;
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    bool okay = (has_mac || has_flash) && mbedtls_sha256_starts(&sha, 0) == 0 &&
+        mbedtls_sha256_update(&sha, (const uint8_t *)"SDP-HW-v1", 9) == 0 &&
+        (!has_mac || mbedtls_sha256_update(&sha, mac, sizeof(mac)) == 0) &&
+        (!has_flash || mbedtls_sha256_update(&sha, (const uint8_t *)&flash_id, sizeof(flash_id)) == 0) &&
+        mbedtls_sha256_finish(&sha, digest) == 0;
+    mbedtls_sha256_free(&sha);
+    return okay;
+}
+
+// A fresh secret: SHA-256 over 64 bytes of the hardware RNG (with its entropy source switched on, since
+// Wi-Fi is not running yet), the hardware fingerprint and boot timing. Any one good source is enough.
+static void new_secret(const uint8_t fingerprint[32])
+{
+    uint8_t noise[64];
+    bootloader_random_enable();
+    esp_fill_random(noise, sizeof(noise));
+    bootloader_random_disable();
+    const int64_t now = esp_timer_get_time();
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    bool okay = mbedtls_sha256_starts(&sha, 0) == 0 && mbedtls_sha256_update(&sha, noise, sizeof(noise)) == 0 &&
+        mbedtls_sha256_update(&sha, fingerprint, 32) == 0 &&
+        mbedtls_sha256_update(&sha, (const uint8_t *)&now, sizeof(now)) == 0 &&
+        mbedtls_sha256_finish(&sha, secret) == 0;
+    mbedtls_sha256_free(&sha);
+    memset(noise, 0, sizeof(noise));
+    ESP_ERROR_CHECK(okay ? ESP_OK : ESP_FAIL);
+}
+
+// The secret lives in NVS until the flash is erased; deviceId = first 8 bytes of SHA-256("SDP-ID-v2" || secret).
+// The ID needs no hardware value, so a broken MAC cannot stop the board from booting or make IDs collide.
+// The stored hardware fingerprint only detects a flash image copied onto another chip: then the copy
+// draws its own secret (new ID, unpaired) instead of impersonating the original board.
 static void load_identity(void)
 {
-    uint8_t id[8];
-    size_t size = sizeof(id);
-    esp_err_t found = nvs_get_blob(identity_store, "device_id", id, &size);
-    if (found == ESP_ERR_NVS_NOT_FOUND) {
-        esp_fill_random(id, sizeof(id));
-        ESP_ERROR_CHECK(nvs_set_blob(identity_store, "device_id", id, sizeof(id)));
-        ESP_ERROR_CHECK(nvs_commit(identity_store));
+    uint8_t fingerprint[32] = {0}, stored[32];
+    const bool has_fingerprint = hardware_fingerprint(fingerprint);
+    size_t size = sizeof(secret);
+    esp_err_t found = nvs_get_blob(identity_store, "secret", secret, &size);
+    size_t stored_size = sizeof(stored);
+    const bool cloned = found == ESP_OK && has_fingerprint &&
+        nvs_get_blob(identity_store, "hardware", stored, &stored_size) == ESP_OK && stored_size == sizeof(stored) &&
+        memcmp(stored, fingerprint, sizeof(stored)) != 0;
+    if (found == ESP_ERR_NVS_NOT_FOUND || found == ESP_ERR_NVS_INVALID_LENGTH || cloned ||
+        (found == ESP_OK && size != sizeof(secret))) {
+        new_secret(fingerprint);
+        ESP_ERROR_CHECK(nvs_set_blob(identity_store, "secret", secret, sizeof(secret)));
+        esp_err_t erased = nvs_erase_key(identity_store, "paired");
+        ESP_ERROR_CHECK(erased == ESP_ERR_NVS_NOT_FOUND ? ESP_OK : erased);
     } else {
         ESP_ERROR_CHECK(found);
-        ESP_ERROR_CHECK(size == sizeof(id) ? ESP_OK : ESP_ERR_INVALID_SIZE);
     }
-    to_hex(id, sizeof(id), device_id);
+    if (has_fingerprint) {
+        ESP_ERROR_CHECK(nvs_set_blob(identity_store, "hardware", fingerprint, sizeof(fingerprint)));
+    }
+    ESP_ERROR_CHECK(nvs_commit(identity_store));
+
+    uint8_t digest[32];
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    bool hashed = mbedtls_sha256_starts(&sha, 0) == 0 &&
+        mbedtls_sha256_update(&sha, (const uint8_t *)"SDP-ID-v2", 9) == 0 &&
+        mbedtls_sha256_update(&sha, secret, sizeof(secret)) == 0 &&
+        mbedtls_sha256_finish(&sha, digest) == 0;
+    mbedtls_sha256_free(&sha);
+    ESP_ERROR_CHECK(hashed ? ESP_OK : ESP_FAIL);
+    to_hex(digest, 8, device_id);
+    uint8_t flag = 0;
+    paired = nvs_get_u8(identity_store, "paired", &flag) == ESP_OK && flag == 1;
 }
 
 void app_main(void)
@@ -479,10 +579,13 @@ void app_main(void)
         }
     }
     size = sizeof(config);
-    bool configured = nvs_get_blob(ota_store, "network", &config, &size) == ESP_OK && size == sizeof(config);
+    bool configured = nvs_get_blob(ota_store, "wifi", &config, &size) == ESP_OK && size == sizeof(config);
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 2048, 0, 0, NULL, 0));
     configASSERT(xTaskCreate(usb_task, "sdp_usb", 4096, NULL, 5, NULL) == pdPASS);
     bool healthy = configured && start_wifi() == ESP_OK;
+    if (healthy) {
+        configASSERT(xTaskCreate(discovery_task, "sdp_discovery", 3072, NULL, 4, NULL) == pdPASS);
+    }
     if (healthy && pending) {
         healthy = (xEventGroupWaitBits(network_events, NETWORK_READY, pdFALSE, pdFALSE,
                                      pdMS_TO_TICKS(URGENT_BOOT_MS)) & NETWORK_READY) != 0;
@@ -492,7 +595,7 @@ void app_main(void)
         healthy = false;
     }
 #endif
-    healthy = healthy && has_pairing_key(&config);
+    healthy = healthy && paired;
     if (healthy) {
         // Register the service before confirming so a candidate can fail back if OTA cannot start.
         healthy = start_ota_http() == ESP_OK;
