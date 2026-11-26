@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 
 use crate::cbor::{DecodeError, Reader, Value};
 use crate::descriptor::{Capability, EventInfo};
+use crate::firmware::{valid_source_id, BootState, FirmwareInfo, PairingMode};
 
 /// รหัส error บนสาย (wire-format.md §Error code)
 pub mod code {
@@ -84,8 +85,11 @@ pub enum Message {
     Ping,
     Pong { uptime_ms: u64, boot_id: [u8; 4] },
     Pair { psk: [u8; 16] },
+    PairWithCode { psk: [u8; 16], code: [u8; 8] },
     PairAck,
     Unpair,
+    FirmwareInfo,
+    FirmwareInfoR(FirmwareInfo),
 }
 
 /// ถอดไม่ได้ — อุปกรณ์ตอบ `error` ด้วย `code()` และ `reply_id()`
@@ -126,9 +130,11 @@ impl Message {
             Message::Event { .. } => 8,
             Message::Ping => 9,
             Message::Pong { .. } => 10,
-            Message::Pair { .. } => 11,
+            Message::Pair { .. } | Message::PairWithCode { .. } => 11,
             Message::PairAck => 12,
             Message::Unpair => 13,
+            Message::FirmwareInfo => 14,
+            Message::FirmwareInfoR(_) => 15,
         }
     }
 
@@ -182,7 +188,14 @@ impl Message {
             Message::Pair { psk } => {
                 m.bytes(0, psk);
             }
-            Message::Ping | Message::PairAck | Message::Unpair => {}
+            Message::PairWithCode { psk, code } => {
+                m.bytes(0, psk).bytes(1, code);
+            }
+            Message::FirmwareInfoR(info) => {
+                m.text(0, &info.project_id).text(1, &info.build_id)
+                    .uint(2, info.pairing_mode as u8).uint(3, info.boot_state as u8);
+            }
+            Message::Ping | Message::PairAck | Message::Unpair | Message::FirmwareInfo => {}
         }
         m.0
     }
@@ -235,16 +248,49 @@ impl Message {
             8 => Message::Event { name: text(m, 0)?, data: m.get(1).cloned() },
             9 => Message::Ping,
             10 => Message::Pong { uptime_ms: uint(m, 0)?, boot_id: fixed(m, 1)? },
-            11 => Message::Pair { psk: fixed(m, 0)? },
+            11 => {
+                let psk = fixed(m, 0)?;
+                if m.get(1).is_some() {
+                    let code: [u8; 8] = fixed(m, 1)?;
+                    if !code.iter().all(u8::is_ascii_digit) { return None; }
+                    Message::PairWithCode { psk, code }
+                } else {
+                    Message::Pair { psk }
+                }
+            }
             12 => Message::PairAck,
             13 => Message::Unpair,
+            14 => Message::FirmwareInfo,
+            15 => {
+                let project_id = text(m, 0)?;
+                let build_id = text(m, 1)?;
+                if !valid_source_id(&project_id) || !valid_source_id(&build_id) {
+                    return None;
+                }
+                Message::FirmwareInfoR(FirmwareInfo {
+                    project_id,
+                    build_id,
+                    pairing_mode: match uint::<u8>(m, 2)? {
+                        0 => PairingMode::Disabled,
+                        1 => PairingMode::UsbConfirm,
+                        2 => PairingMode::UsbCode,
+                        _ => return None,
+                    },
+                    boot_state: match uint::<u8>(m, 3)? {
+                        0 => BootState::Running,
+                        1 => BootState::Pending,
+                        2 => BootState::RolledBack,
+                        _ => return None,
+                    },
+                })
+            }
             _ => unreachable!("from_map เรียกเฉพาะ t ที่รู้จัก"),
         };
         Some(msg)
     }
 }
 
-const KNOWN_TYPES: core::ops::RangeInclusive<u64> = 1..=13;
+const KNOWN_TYPES: core::ops::RangeInclusive<u64> = 1..=15;
 
 impl Envelope {
     pub fn new(id: u16, msg: Message) -> Self {

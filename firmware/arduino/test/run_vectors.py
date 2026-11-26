@@ -170,6 +170,26 @@ def test_device(messages):
         _, tx = h.send("R", serial[req])
         check(f"{req} -> {resp}", tx.hex() == serial[resp], tx.hex())
     check("led on", h.send("Q", 2)[0] == ["PIN 1"])
+    expect_reply(h, "existing firmware omits build metadata", serial["firmware_info"], error_body(14, 7))
+    h.send("BUILDIDS")
+    _, tx = h.send("R", serial["firmware_info"])
+    check("firmware metadata", tx.hex() == serial["firmware_info_r"], tx.hex())
+    h.send("PROVISION", "confirm", "open")
+    expect_reply(h, "USB confirm enrolls without a code", serial["pair"], cbor([12, 10, {}]))
+    h.send("PROVISION", "code", "closed")
+    expect_reply(h, "closed USB enrollment rejects correct code", serial["pair_with_code"], error_body(13, 8))
+    h.send("PROVISION", "code", "open")
+    expect_reply(h, "firmware advertises USB code mode", serial["firmware_info"],
+                 cbor([15, 14, {0: "led-demo", 1: "demo-build-a", 2: 2, 3: 0}]))
+    expect_reply(h, "missing USB code", serial["pair"], error_body(10, 8))
+    expect_reply(h, "incorrect USB code", request(11, 13, {0: b"\1" * 16, 1: b"00000000"}), error_body(13, 8))
+    expect_reply(h, "USB code enrolls with correct code", serial["pair_with_code"], cbor([12, 13, {}]))
+    h.send("BOOTSTATE", 1)
+    expect_reply(h, "new firmware awaits boot confirmation", serial["firmware_info"],
+                 cbor([15, 14, {0: "led-demo", 1: "demo-build-a", 2: 2, 3: 1}]))
+    h.send("BOOTSTATE", 2)
+    expect_reply(h, "firmware reports rollback", serial["firmware_info"],
+                 cbor([15, 14, {0: "led-demo", 1: "demo-build-a", 2: 2, 3: 2}]))
 
     # แบ่งหน้า: led.set ใส่หน้าแรกได้ แต่ led.set + temp.read ไม่ได้ (24 = หัวของ describe_r ที่ไลบรารีกันไว้)
     led = len(messages["describe_r_page0"]["body"]) // 2 - len(cbor([4, 2, {0: [], 2: 1}]))

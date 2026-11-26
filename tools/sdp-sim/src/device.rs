@@ -5,6 +5,7 @@
 use std::time::Instant;
 
 use sdp_core::descriptor::{Capability, Danger, EventInfo};
+use sdp_core::firmware::{BootState, FirmwareInfo, PairingMode};
 use sdp_core::message::{code, DescribeR, ErrorMsg, Hello, HelloAck, PairProof};
 use sdp_core::{Message, Value};
 
@@ -113,7 +114,11 @@ impl Device {
                 uptime_ms: self.started.elapsed().as_millis() as u64 & 0xFFFF_FFFF,
                 boot_id: self.boot_id,
             },
-            Message::Pair { .. } | Message::Unpair if wireless => error(code::FORBIDDEN_TRANSPORT, None),
+            Message::FirmwareInfo => Message::FirmwareInfoR(FirmwareInfo {
+                project_id: "sdp-sim".into(), build_id: concat!("sim-", env!("CARGO_PKG_VERSION_MAJOR"), "-", env!("CARGO_PKG_VERSION_MINOR"), "-", env!("CARGO_PKG_VERSION_PATCH")).into(),
+                pairing_mode: PairingMode::Disabled, boot_state: BootState::Running,
+            }),
+            Message::Pair { .. } | Message::PairWithCode { .. } | Message::Unpair if wireless => error(code::FORBIDDEN_TRANSPORT, None),
             Message::Pair { .. } | Message::Unpair => Message::PairAck,
             _ => error(code::UNKNOWN_MESSAGE, None),
         }

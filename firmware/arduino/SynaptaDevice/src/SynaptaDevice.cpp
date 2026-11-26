@@ -29,7 +29,10 @@ enum MessageType : uint8_t {
   kPing = 9,
   kPong = 10,
   kPair = 11,
+  kPairAck = 12,
   kUnpair = 13,
+  kFirmwareInfo = 14,
+  kFirmwareInfoR = 15,
 };
 
 const uint8_t kEmptyMap[] = {0xA0};
@@ -50,6 +53,19 @@ const char kNeedsLinkLost[] SDP_FLASH = "firmware must set onLinkLost() before e
 const char kOutputTooLarge[] SDP_FLASH = "output larger than outputBytes in SdpConfig";
 const char kNoPairing[] SDP_FLASH = "pairing is not supported by this firmware (no wireless link)";
 const char kEncrypted[] SDP_FLASH = "encrypted frames are not supported on this link";
+const char kBadFirmwareId[] SDP_FLASH = "SDP: set both projectId and buildId to valid source IDs\n";
+
+bool isSourceId(const char* text) {
+  if (!text) return false;
+  size_t len = 0;
+  for (; text[len]; ++len) {
+    const char c = text[len];
+    const bool alphanumeric = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
+    if (len == 96 || (!alphanumeric && (len == 0 || (c != '-' && c != '_')))) return false;
+  }
+  if (len == 0 || strcmp(text, "con") == 0 || strcmp(text, "prn") == 0 || strcmp(text, "aux") == 0 || strcmp(text, "nul") == 0) return false;
+  return !(len == 4 && (strncmp(text, "com", 3) == 0 || strncmp(text, "lpt", 3) == 0) && text[3] >= '0' && text[3] <= '9');
+}
 
 bool flashEqualsRam(const char* flashText, const uint8_t* ram, size_t len) {
   for (size_t i = 0; i < len; i++) {
@@ -89,6 +105,10 @@ bool SynaptaDevice::begin(Stream& port, const SdpConfig& config, const SdpCapabi
   sdplib::randomBytes(bootId_, sizeof bootId_);
 
   ready_ = lintDescriptors();
+  if ((config_.projectId || config_.buildId || config_.usbProvision) && (!isSourceId(config_.projectId) || !isSourceId(config_.buildId))) {
+    logFlash(kBadFirmwareId);
+    ready_ = false;
+  }
   if (ready_) {  // schema ผิดรูปเขียนเป็น CBOR ไม่ได้ — ไม่ ready ก็ไม่มีใครได้ describe อยู่แล้ว
     sdplib::CountSink all;
     for (size_t i = 0; i < capCount_ + eventCount_; i++) writeDescriptor(all, i);
@@ -159,6 +179,8 @@ void SynaptaDevice::handleMessage(const uint8_t* body, const uint8_t* end) {
       return handleDescribe(id, m);
     case kCall:
       return handleCall(id, m);
+    case kFirmwareInfo:
+      return handleFirmwareInfo(id);
     case kPing: {
       CborWriter w = startReply(kPong, id, 2);
       w.uint(0);
@@ -168,6 +190,7 @@ void SynaptaDevice::handleMessage(const uint8_t* body, const uint8_t* end) {
       return finishReply();
     }
     case kPair:
+      return handlePair(id, m);
     case kUnpair:
       return sendError(id, SDP_FAILED, kNoPairing);
     default:
@@ -216,6 +239,39 @@ void SynaptaDevice::handleHello(uint16_t id, CborRef m) {
   w.bytes(bootId_, sizeof bootId_);
   w.uint(10);
   w.boolean(false);  // ยังไม่มีลิงก์ไร้สาย จึงไม่มีการจับคู่
+  finishReply();
+}
+
+void SynaptaDevice::handleFirmwareInfo(uint16_t id) {
+  if (!config_.projectId) return sendError(id, SDP_UNKNOWN_MESSAGE);
+  CborWriter w = startReply(kFirmwareInfoR, id, 4);
+  w.uint(0);
+  w.text(config_.projectId);
+  w.uint(1);
+  w.text(config_.buildId);
+  w.uint(2);
+  w.uint(config_.usbProvision ? static_cast<uint8_t>(config_.usbPairing) : 0);
+  w.uint(3);
+  w.uint(static_cast<uint8_t>(config_.bootState));
+  finishReply();
+}
+
+void SynaptaDevice::handlePair(uint16_t id, CborRef m) {
+  if (!config_.usbProvision) return sendError(id, SDP_FAILED, kNoPairing);
+  if (config_.address != 0xFF || replyAddr_) return sendError(id, SDP_FORBIDDEN_TRANSPORT);
+  const CborRef psk = m.mapGetUint(0);
+  if (!psk.valid() || !psk.isBytes() || psk.arg() != 16) return sendError(id, SDP_INVALID_INPUT);
+  const CborRef code = m.mapGetUint(1);
+  if (config_.usbPairing == SdpUsbPairing::Code && !code.valid()) return sendError(id, SDP_AUTH_REQUIRED);
+  if (code.valid()) {
+    if (!code.isBytes() || code.arg() != 8) return sendError(id, SDP_INVALID_INPUT);
+    for (size_t i = 0; i < 8; ++i) {
+      if (code.payload()[i] < '0' || code.payload()[i] > '9') return sendError(id, SDP_INVALID_INPUT);
+    }
+  }
+  const uint8_t result = config_.usbProvision(psk.payload(), code.valid() ? code.payload() : nullptr);
+  if (result != 0) return sendError(id, result);
+  startReply(kPairAck, id, 0);
   finishReply();
 }
 

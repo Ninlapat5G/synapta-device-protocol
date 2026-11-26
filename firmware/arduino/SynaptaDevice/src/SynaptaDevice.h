@@ -199,6 +199,12 @@ class SdpCall {
   bool errorInFlash_ = false;
 };
 
+enum class SdpUsbPairing : uint8_t { Confirm = 1, Code = 2 };
+enum class SdpBootState : uint8_t { Running = 0, Pending = 1, RolledBack = 2 };
+// ใช้กับ Stream USB เท่านั้น callback ต้องตรวจช่วง enrollment และตรวจรหัสพร้อมจำกัดจำนวนครั้งก่อนบันทึก PSK
+// psk มี 16 ไบต์, code มี 8 หลัก ASCII หรือ nullptr, คืน 0 เมื่อบันทึกสำเร็จ หรือ SdpErrorCode
+using SdpUsbProvision = uint8_t (*)(const uint8_t* psk, const uint8_t* code);
+
 struct SdpConfig {
   const char* model = "arduino";     // ชื่อรุ่นบอร์ด เช่น "esp32-devkit"
   const char* firmware = "unknown";  // ชื่อ + เวอร์ชัน firmware — host ใช้ตรวจว่าแฟลชสำเร็จ
@@ -212,6 +218,11 @@ struct SdpConfig {
   uint16_t heartbeatMs = 1000;         // host ส่ง ping ทุกเท่านี้ — ไม่ได้ยินเกิน 3 เท่า = link หลุด
   uint16_t describePageBytes = 4096;   // ขนาดหน้าของ describe (ขาอุปกรณ์ → host จำกัด 4096)
   uint8_t address = 0xFF;              // RS485 หลายอุปกรณ์: เลขของบอร์ดนี้ (0xFF = ไม่ใช้)
+  const char* projectId = nullptr;    // ค่าใน build manifest; nullptr ทั้งคู่สำหรับแอป v1 เดิม
+  const char* buildId = nullptr;
+  SdpUsbPairing usbPairing = SdpUsbPairing::Confirm;
+  SdpUsbProvision usbProvision = nullptr;
+  SdpBootState bootState = SdpBootState::Running;
 };
 
 class SynaptaDevice {
@@ -236,6 +247,7 @@ class SynaptaDevice {
 
   bool linked() const { return linked_; }  // host คุยอยู่ (ยังไม่หลุด)
   uint32_t capsHash() const { return capsHash_; }
+  void setBootState(SdpBootState state) { config_.bootState = state; }
 
   // ส่ง event: เขียน data ลง SdpOutput ที่ได้ แล้ว sendEvent() — ไม่ส่งถ้า host ไม่ได้ต่ออยู่
   // ห้ามเรียกระหว่าง handler ของ call (ใช้ buffer เดียวกับ output)
@@ -255,6 +267,8 @@ class SynaptaDevice {
   void handleFrame(const uint8_t* inner, uint16_t len);
   void handleMessage(const uint8_t* body, const uint8_t* end);
   void handleHello(uint16_t id, sdplib::CborRef m);
+  void handleFirmwareInfo(uint16_t id);
+  void handlePair(uint16_t id, sdplib::CborRef m);
   void handleCall(uint16_t id, sdplib::CborRef m);
   void sendCallError(uint16_t id, const SdpCall& call);
   sdplib::CborWriter startReply(uint8_t type, uint16_t id, size_t mapEntries);

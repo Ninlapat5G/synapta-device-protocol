@@ -14,6 +14,7 @@ pub mod crc;
 #[cfg(feature = "crypto")]
 pub mod crypto;
 pub mod descriptor;
+pub mod firmware;
 pub mod frame;
 pub mod message;
 

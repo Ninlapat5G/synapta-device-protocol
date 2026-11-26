@@ -112,6 +112,11 @@ sdp.sendEvent();  // ไม่ส่งถ้า PC ไม่ได้ต่อ�
 | `heartbeatMs` | 1000 | |
 | `describePageBytes` | 4096 | |
 | `address` | 0xFF (ไม่ใช้) | เลขของบอร์ดบนสาย RS485 หลายตัว |
+| `projectId`, `buildId` | ว่าง | ฝังจาก build manifest แล้ว host อ่านผ่าน `firmware_info` ตัวอย่าง LedDemo รับ `SDP_PROJECT_ID` และ `SDP_BUILD_ID` ตอน build |
+| `usbPairing`, `usbProvision` | `Confirm`, ว่าง | เปิดเฉพาะบน Stream USB ตั้งเป็น `Code` หากต้องกรอก 8 หลัก callback ตรวจว่าอยู่ในช่วง enrollment, ตรวจรหัสและจำกัดจำนวนครั้ง แล้วจึงบันทึก PSK |
+| `bootState` | `Running` | ตัวอัปเดตตั้ง `Pending` ตอนเริ่มบูต image ใหม่ ใช้ `setBootState(Running)` หลังยืนยัน image กับ bootloader แล้ว และใช้ `RolledBack` เมื่อมีหลักฐานการย้อนรุ่น |
+
+บน Arduino-ESP32 2.0.17 ให้แอป OTA ที่ทำ self-test เองกำหนด `extern "C" bool verifyRollbackLater() { return true; }` เมื่อเปิด rollback ใน SDK เพื่อให้แอปเป็นผู้ยืนยัน image หลัง self-test จาก `setup()` หรือ `loop()` ค่าเริ่มต้นของ Arduino core ยืนยัน image ตั้งแต่ก่อน `setup()`.
 
 ## ขนาด
 
@@ -120,5 +125,5 @@ LedDemo บน Uno: flash ราว **24 KB จาก 32 KB**, RAM ราว 950
 
 ## ยังไม่มีในรุ่นนี้
 
-- ลิงก์ไร้สาย (WiFi/BLE) และการจับคู่/เข้ารหัส — เฟส 2–3 (`pair` ตอนนี้ตอบ error 5)
+- ลิงก์ไร้สาย (WiFi/BLE) และการเข้ารหัส — เฟส 2–3. LedDemo ใช้ USB serial; เปิด USB provisioning ได้เมื่อแอปส่ง callback ที่จัดการ PSK มาให้ |
 - บอร์ดอื่นนอกจาก AVR/ESP32 คอมไพล์ได้แต่ `device_id` จะสุ่มใหม่ทุกบูต

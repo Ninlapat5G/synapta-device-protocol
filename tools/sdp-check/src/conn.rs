@@ -5,8 +5,9 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use sdp_core::crypto::{self, Role, Session};
+use sdp_core::firmware::FirmwareInfo;
 use sdp_core::frame::FLAG_ENCRYPTED;
-use sdp_core::message::{Hello, HelloAck};
+use sdp_core::message::{code, Hello, HelloAck};
 use sdp_core::{Envelope, Message, Value};
 
 use crate::link::{Incoming, Link};
@@ -87,6 +88,17 @@ impl Connection {
             (None, _) => {}
         }
         Ok(ack)
+    }
+
+    /// Read after hello. Legacy firmware and an unauthenticated Wi-Fi link have no trusted metadata.
+    pub fn firmware_info(&mut self) -> Result<Option<FirmwareInfo>, CheckError> {
+        if self.is_wireless() && self.session.is_none() { return Ok(None); }
+        match self.request(Message::FirmwareInfo)? {
+            Message::FirmwareInfoR(info) => Ok(Some(info)),
+            Message::Error(e) if e.code == code::UNKNOWN_MESSAGE => Ok(None),
+            Message::Error(e) => fail(format!("firmware_info refused: error {}", e.code)),
+            other => fail(format!("expected firmware_info_r, got t={}", other.type_code())),
+        }
     }
 
     pub fn request(&mut self, msg: Message) -> Result<Message, CheckError> {

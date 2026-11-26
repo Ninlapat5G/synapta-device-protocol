@@ -55,6 +55,7 @@ MCU รับของพวกนี้ไม่ไหว (AVR มี RAM 2 KB,
 | [docs/wire-format.md](docs/wire-format.md) | สเปกข้อความบนสาย v1: เฟรม, CBOR, ข้อความ, schema, การเข้ารหัส |
 | [spec/vectors/](spec/vectors/README.md) | test vectors ระดับ byte ที่ทุกฝั่งต้องผ่าน |
 | [docs/transports.md](docs/transports.md) | serial, RS485, WiFi, BLE และกับดักของแต่ละแบบ |
+| [docs/esp32-ota.md](docs/esp32-ota.md) | โมดูล ESP32 OTA สำหรับ SynaptaCode, Connect และ agent |
 | [docs/flashing.md](docs/flashing.md) | อัปโค้ดผ่านสายและไร้สาย |
 | [docs/safety.md](docs/safety.md) | สิทธิ์, heartbeat, สภาพปลอดภัยของอุปกรณ์ที่ขยับของจริง |
 | [docs/roadmap.md](docs/roadmap.md) | เฟส และคำถามที่ยังเปิด |

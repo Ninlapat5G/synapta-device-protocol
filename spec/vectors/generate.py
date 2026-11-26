@@ -121,6 +121,9 @@ MESSAGES = [
     ("pair", 11, 10, {0: PSK}, "USB เท่านั้น"),
     ("pair_ack", 12, 10, {}, ""),
     ("unpair", 13, 11, {}, "USB เท่านั้น"),
+    ("pair_with_code", 11, 13, {0: PSK, 1: b"01234567"}, "USB code enrollment"),
+    ("firmware_info", 14, 14, {}, "after hello"),
+    ("firmware_info_r", 15, 14, {0: "led-demo", 1: "demo-build-a", 2: 0, 3: 0}, "USB-only demo"),
     ("id_max", 9, 65535, {}, "id สูงสุด 16 บิต"),
 ]
 

@@ -60,6 +60,10 @@ void setup() {
   SdpConfig config;
   config.model = BOARD_MODEL;
   config.firmware = "led-demo 1.0.0";
+#if defined(SDP_PROJECT_ID) && defined(SDP_BUILD_ID)
+  config.projectId = SDP_PROJECT_ID;
+  config.buildId = SDP_BUILD_ID;
+#endif
   sdp.onLinkLost(allOff);
   sdp.begin(Serial, config, CAPS, EVENTS);
 }

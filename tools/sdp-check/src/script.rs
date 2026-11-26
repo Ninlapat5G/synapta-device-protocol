@@ -69,6 +69,10 @@ fn steps(run: &mut Run, options: &CheckOptions) -> Result<(), CheckError> {
         if ack.pairing.is_some() { ", encrypted session" } else { "" }
     ));
 
+    if let Some(info) = run.conn.firmware_info()? {
+        run.pass(format!("firmware: project {} / build {} ({:?})", info.project_id, info.build_id, info.boot_state));
+    }
+
     let (caps, events) = describe(run)?;
     let hash = caps_hash([(&caps[..], &events[..])]);
     let names: Vec<&str> = caps.iter().map(|c| c.name.as_str()).chain(events.iter().map(|e| e.name.as_str())).collect();
@@ -168,17 +172,19 @@ fn wait_for_event(run: &mut Run, timeout: Duration, heartbeat: Duration) -> Resu
 /// หยุด ping เกิน 3 × heartbeat — firmware ต้องเรียก onLinkLost แล้วยังตอบ hello ใหม่ได้โดยไม่รีเซ็ต
 fn link_lost(run: &mut Run, heartbeat: Duration, boot_id: &[u8; 4]) -> Result<(), CheckError> {
     let wait = heartbeat * 3 + Duration::from_millis(1000);
+    let first_new_log = run.conn.logs.len();
     run.info(format!("stopping pings for {} ms to trigger on_link_lost", wait.as_millis()));
     run.conn.pump(wait)?;
+    // The first delimiter in hello_ack releases any text buffered by the serial receiver.
+    let ack = run.conn.hello()?;
     if run.conn.is_wireless() {
         run.info("on_link_lost is not visible over TCP - check the device console".into());
-    } else if let Some(line) = run.conn.logs.iter().find(|l| l.contains("link lost")) {
+    } else if let Some(line) = run.conn.logs[first_new_log..].iter().find(|l| l.contains("link lost")) {
         let line = line.trim_end().to_string();
         run.pass(format!("device reported link loss: {line:?}"));
     } else {
         run.fail("device did not report link loss (expected a 'SDP: link lost' log line)".into());
     }
-    let ack = run.conn.hello()?;
     if &ack.boot_id == boot_id {
         run.pass("device answers hello again after link loss (no reset)".into());
     } else {

@@ -51,7 +51,9 @@ bool loadDeviceId(uint8_t id[8]) {
   if (!prefs.begin("sdp", false)) return false;
   if (prefs.getBytes("device_id", id, 8) != 8) {
     randomBytes(id, 8);
-    prefs.putBytes("device_id", id, 8);
+    const bool saved = prefs.putBytes("device_id", id, 8) == 8;
+    prefs.end();
+    return saved;
   }
   prefs.end();
   return true;

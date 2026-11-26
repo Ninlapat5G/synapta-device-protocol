@@ -70,6 +70,7 @@ fn full_sequence_encrypted() {
     let (ok, lines) = check(&sim, Some(PSK));
     assert!(ok, "{lines:#?}");
     assert!(lines[0].contains("encrypted session"), "{lines:#?}");
+    assert!(lines.iter().any(|line| line.starts_with("PASS firmware: project sdp-sim / build sim-")), "{lines:#?}");
     assert!(notices(&sim).contains(&Notice::LinkLost));
 }
 

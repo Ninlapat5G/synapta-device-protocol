@@ -86,9 +86,18 @@ host ถือว่าเป็นคำตอบของคำขอที่
 | 8 | `event` | dev → host | `0` name (text) · `1` data — `id` = 0 |
 | 9 | `ping` | host → dev | ว่าง |
 | 10 | `pong` | dev → host | `0` uptime_ms · `1` boot_id (bstr 4) |
-| 11 | `pair` | host → dev | `0` psk (bstr 16) — **USB เท่านั้น** |
+| 11 | `pair` | host → dev | `0` psk (bstr 16) · `1` pairing_code (bstr 8, เลข ASCII เมื่อ firmware ขอรหัส) — **USB เท่านั้น** |
 | 12 | `pair_ack` | dev → host | ว่าง |
 | 13 | `unpair` | host → dev | ว่าง — **USB เท่านั้น** ตอบ `pair_ack` |
+| 14 | `firmware_info` | host → dev | ว่าง อ่านหลัง `hello_ack` |
+| 15 | `firmware_info_r` | dev → host | `0` project_id (text) · `1` build_id (text) · `2` pairing_mode (uint) · `3` boot_state (uint) |
+
+### ตัวตนของเฟิร์มแวร์และการจับคู่ USB
+
+- `device_id` ใน `hello_ack` ระบุบอร์ดเดิม ส่วน `project_id` และ `build_id` ระบุโปรเจกต์และ build ที่ฝังใน executable ทั้งสองเป็นตัวพิมพ์เล็ก ASCII อักษร/ตัวเลข/`-`/`_` ยาว 1–96 ตัว เริ่มด้วยอักษรหรือตัวเลข และข้ามชื่ออุปกรณ์สงวนของ Windows เช่น `con`, `aux`, `com1`.
+- host เรียก `firmware_info` หลัง handshake ผ่าน USB หรือ session ไร้สายที่ยืนยัน PSK แล้ว อุปกรณ์ v1 เดิมตอบ `error 7` ให้ host ทำงานตามเดิมและแสดงว่าไม่ทราบ build.
+- `pairing_mode` เป็น `0` ปิดการ provision, `1` ยืนยันผ่าน USB โดยไม่กรอกรหัส, หรือ `2` ยืนยันผ่าน USB พร้อมรหัส 8 หลัก เปิดรับ `pair` เฉพาะช่วง enrollment ที่บอร์ดเปิดไว้ ตรวจรหัสบนบอร์ดและจำกัดจำนวนครั้งก่อนบันทึก PSK. หลังจับคู่ ลิงก์ Wi-Fi ใช้ PSK ตามสเปกเดิม.
+- `boot_state` เป็น `0` รัน build ที่ยืนยันแล้ว, `1` build ใหม่รอยืนยันหลัง self-test, หรือ `2` กลับไปรัน build ก่อนหน้าโดยมีหลักฐานจาก OTA. Host รายงาน `verified` เมื่อ `device_id` ตรง, `boot_id` เปลี่ยน และ build ที่ร้องขอกำลังรันแบบสถานะ `0`. รายงาน `rolled_back` เมื่อบอร์ดเดิมบูตใหม่ รายงานสถานะ `2` และ build ตรงกับรุ่นที่อ่านก่อนอัปเดต.
 
 - `device_id` สุ่มครั้งแรกที่บูตแล้วเก็บใน flash/EEPROM ไม่เปลี่ยนจนกว่าจะล้าง
 - `boot_id` สุ่มใหม่ทุกครั้งที่บูต — **ใช้ตัวนี้ตรวจว่าบอร์ดรีเซ็ต ไม่ใช่ `uptime_ms` ลดลง**

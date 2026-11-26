@@ -4,6 +4,7 @@ use sdp_core::cbor::Value;
 use sdp_core::crc::{crc16_ccitt_false, crc32};
 use sdp_core::crypto::{key_proof, session_key, OpenError, Role, Session};
 use sdp_core::descriptor::{caps_hash, Capability, Danger, EventInfo};
+use sdp_core::firmware::{BootState, FirmwareInfo, PairingMode, UploadExpectation, UploadOutcome};
 use sdp_core::frame::{encode_serial, encode_tcp, SerialEvent, SerialReceiver};
 use sdp_core::message::{DescribeR, ErrorMsg, Hello, HelloAck, PairProof};
 use sdp_core::{cobs, Envelope, Message};
@@ -159,6 +160,12 @@ fn expected(name: &str) -> Envelope {
         "pair" => (10, Message::Pair { psk: arr(PSK) }),
         "pair_ack" => (10, Message::PairAck),
         "unpair" => (11, Message::Unpair),
+        "pair_with_code" => (13, Message::PairWithCode { psk: arr(PSK), code: *b"01234567" }),
+        "firmware_info" => (14, Message::FirmwareInfo),
+        "firmware_info_r" => (14, Message::FirmwareInfoR(FirmwareInfo {
+            project_id: "led-demo".into(), build_id: "demo-build-a".into(),
+            pairing_mode: PairingMode::Disabled, boot_state: BootState::Running,
+        })),
         "id_max" => (65535, Message::Ping),
         other => panic!("vector ใหม่ที่เทสต์ยังไม่รู้จัก: {other}"),
     };
@@ -166,6 +173,24 @@ fn expected(name: &str) -> Envelope {
 }
 
 // ---------- เทสต์ ----------
+
+#[test]
+fn upload_outcome_requires_the_same_board_and_a_confirmed_boot() {
+    let Message::HelloAck(before) = expected("hello_ack").msg else { panic!("missing hello_ack vector") };
+    let Message::FirmwareInfoR(old) = expected("firmware_info_r").msg else { panic!("missing firmware info vector") };
+    let upload = UploadExpectation { previous_hello: &before, previous_firmware: &old, project_id: "led-demo", build_id: "demo-build-b" };
+    let mut after = before.clone();
+    after.boot_id[0] ^= 1;
+    let new = FirmwareInfo { build_id: "demo-build-b".into(), ..old.clone() };
+    assert_eq!(upload.verify(&after, &new), UploadOutcome::Verified);
+    assert_eq!(upload.verify(&before, &new), UploadOutcome::Unknown);
+    assert_eq!(upload.verify(&after, &FirmwareInfo { boot_state: BootState::Pending, ..new }), UploadOutcome::Unknown);
+    assert_eq!(upload.verify(&after, &old), UploadOutcome::Unknown);
+    let rolled_back = FirmwareInfo { boot_state: BootState::RolledBack, ..old.clone() };
+    assert_eq!(upload.verify(&after, &rolled_back), UploadOutcome::RolledBack);
+    after.device_id[0] ^= 1;
+    assert_eq!(upload.verify(&after, &rolled_back), UploadOutcome::Unknown);
+}
 
 #[test]
 fn messages() {

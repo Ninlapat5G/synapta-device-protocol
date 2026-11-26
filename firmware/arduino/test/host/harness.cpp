@@ -129,6 +129,14 @@ static SdpConfig demoConfig(uint16_t pageBytes) {
   return c;
 }
 
+static bool g_enrollmentOpen = true;
+static bool g_requireCode = false;
+
+static uint8_t provisionTest(const uint8_t*, const uint8_t* code) {
+  if (!g_enrollmentOpen || (g_requireCode && (!code || memcmp(code, "01234567", 8) != 0))) return SDP_AUTH_REQUIRED;
+  return 0;
+}
+
 // ถอดด้วยตัวอ่านของไลบรารีแล้วเขียนกลับแบบ canonical (เรียง key) — ทดสอบ CborRef กับทุกรูปที่ผู้ส่งอาจส่งมา
 class VectorSink : public sdplib::Sink {
  public:
@@ -221,8 +229,21 @@ static void runCommand(const std::string& cmd, const std::string& a, const std::
     printf("PIN %d\n", g_pins[atoi(a.c_str())]);
   } else if (cmd == "U") {
     sdp.onLinkLost(nullptr);
+  } else if (cmd == "BOOTSTATE") {
+    sdp.setBootState(static_cast<SdpBootState>(atoi(a.c_str())));
   } else if (cmd == "PAGE") {
     sdp.begin(Serial, demoConfig(static_cast<uint16_t>(atoi(a.c_str()))), CAPS, EVENTS);
+  } else if (cmd == "BUILDIDS" || cmd == "PROVISION") {
+    SdpConfig metadata = demoConfig(4096);
+    metadata.projectId = "led-demo";
+    metadata.buildId = "demo-build-a";
+    if (cmd == "PROVISION") {
+      g_enrollmentOpen = b != "closed";
+      g_requireCode = a == "code";
+      metadata.usbPairing = g_requireCode ? SdpUsbPairing::Code : SdpUsbPairing::Confirm;
+      metadata.usbProvision = provisionTest;
+    }
+    sdp.begin(Serial, metadata, CAPS, EVENTS);
   } else if (cmd == "TESTCAPS") {
     printf("BEGIN %d\n", sdp.begin(Serial, demoConfig(4096), TEST_CAPS, EVENTS) ? 1 : 0);
   } else if (cmd == "BADCAPS") {
