@@ -10,7 +10,7 @@ The host stores device addresses and pairing credentials on the upload machine. 
 
 ## The owner's program
 
-People new to SDP start from [tools/sdp-ota/GUIDE.md](../tools/sdp-ota/GUIDE.md) (Thai, step by step). `sdpo guide`, SynaptaCode's Firmware page and the agent tool `sdp_ota_guide` all show that file.
+People new to SDP start from [tools/sdp-ota/GUIDE.md](../tools/sdp-ota/GUIDE.md) (Thai, step by step). `sdpo guide` and the agent tool `sdp_ota_guide` show that file; it is written for agents and Syn, so SynaptaCode's pages do not repeat it.
 
 The board's own program lives in `main/app.c` as `void app_start(void)`, declared in `main/sdp_app.h`. `sdp_ota.c` runs it once in its own task (`app`, 4 KiB stack, priority 1) right after the USB task. That is before Wi-Fi starts and before a pending build is confirmed. So a program that crashes at start-up rolls the board back. A program that loops must call `vTaskDelay`, or Wi-Fi and the next upload stall. `main/CMakeLists.txt` requires `driver`, so every ESP-IDF peripheral header works without CMake changes.
 
