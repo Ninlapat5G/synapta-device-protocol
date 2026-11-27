@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import secrets
 import select
+import shutil
 import socket
 import subprocess
 import sys
@@ -532,6 +533,151 @@ def setup_board(args):
     return 0
 
 
+GUIDE = Path(__file__).with_name("GUIDE.md")
+FIRMWARE = Path(__file__).resolve().parents[2] / "firmware" / "esp-idf"
+# Files `new --refresh` replaces with this checkout's copy; the owner's app.c and main/CMakeLists.txt stay.
+PROTOCOL_FILES = ("CMakeLists.txt", "partitions.csv", "sdkconfig.defaults", "main/sdp_ota.c", "main/sdp_app.h")
+PROJECT_FILES = PROTOCOL_FILES + ("main/CMakeLists.txt", "main/app.c")
+PROJECT_IGNORE = "build/\nsdkconfig\nsdkconfig.old\n"
+PROJECT_README = """# {name}
+
+โปรเจกต์ ESP32 ที่อัปโหลดผ่าน Wi-Fi ด้วย SDP
+
+- เขียนโปรแกรมใน `main/app.c` ไฟล์เดียว (ไฟล์อื่นใน `main` เป็นของ SDP)
+- Build แล้วอัปโหลด: หน้า Firmware ใน Synapta Code ใส่โฟลเดอร์นี้แล้วกด "Build แล้วอัปโหลด" หรือสั่ง AI
+- วิธีใช้ทั้งหมด: `sdpo guide`
+"""
+
+
+def guide_topics():
+    """GUIDE.md split at its `## id: title` headings: (intro, {id: (title, text)})."""
+    intro, *sections = re.split(r"^## ", GUIDE.read_text(encoding="utf-8"), flags=re.MULTILINE)
+    topics = {}
+    for section in sections:
+        heading = section.partition("\n")[0]
+        topic, _, title = heading.partition(":")
+        topics[topic.strip()] = (title.strip(), "## " + section.rstrip())
+    return intro.rstrip(), topics
+
+
+def show_guide(args):
+    """Plain text, not NDJSON: this command is for reading. `sdpo guide` alone shows the start page."""
+    intro, topics = guide_topics()
+    if args.topic == "all":
+        text = GUIDE.read_text(encoding="utf-8").rstrip()
+    elif args.topic in topics:
+        text = topics[args.topic][1]
+    else:
+        raise OtaError(f"no guide topic {args.topic!r}; topics: {', '.join(topics)}, all")
+    if args.topic == "start":
+        text = intro + "\n\n" + text
+    text += "\n\nหัวข้อ: " + " · ".join(f"{topic} ({title})" for topic, (title, _) in topics.items())
+    text += "\nเปิดหัวข้อ: sdpo guide <หัวข้อ>   ทั้งหมด: sdpo guide all"
+    if not sys.stdout.isatty() and hasattr(sys.stdout, "reconfigure"):
+        # A host reading the pipe expects UTF-8; Windows would otherwise encode Thai in the ANSI code page.
+        sys.stdout.reconfigure(encoding="utf-8")
+    print(text)
+    return 0
+
+
+def example_names():
+    return sorted(path.parent.name for path in (FIRMWARE / "examples").glob("*/app.c"))
+
+
+def example_summary(name):
+    first = (FIRMWARE / "examples" / name / "app.c").read_text(encoding="utf-8").splitlines()[0]
+    return first.removeprefix("//").strip()
+
+
+def git_commit(folder, message):
+    """Commits the new project so SynaptaCode can archive it; False when Git is not installed."""
+    if not shutil.which("git"):
+        return False
+    git = ["git", "-C", str(folder)]
+    # A machine without a Git identity still gets its first commit.
+    named = subprocess.run(git + ["config", "user.email"], capture_output=True, check=False).returncode == 0
+    identity = [] if named else ["-c", "user.name=SDP", "-c", "user.email=sdp@localhost"]
+    for command in (["init", "-q"], ["add", "-A"], identity + ["commit", "-q", "-m", message]):
+        if subprocess.run(git + command, capture_output=True, check=False).returncode:
+            return False
+    return True
+
+
+def new_project(args):
+    """Copies the SDP project template (optionally with an example's app.c) into a new folder."""
+    if args.list:
+        for name in example_names():
+            emit("example", name=name, summary=example_summary(name))
+        return 0
+    if args.folder is None:
+        raise OtaError("name the project folder: sdpo new FOLDER [--example blink]")
+    target = args.folder.resolve()
+    template = FIRMWARE / "sdp-ota"
+    if args.refresh:
+        if not (target / "main" / "app.c").is_file():
+            raise OtaError(f"{target} is not an SDP project (main/app.c is missing)")
+        for name in PROTOCOL_FILES:
+            shutil.copyfile(template / name, target / name)
+        emit("project", path=str(target), refreshed=list(PROTOCOL_FILES))
+        return 0
+    if args.example and args.example not in example_names():
+        raise OtaError(f"no example {args.example!r}; examples: {', '.join(example_names())}")
+    if target.exists() and any(target.iterdir()):
+        raise OtaError(f"{target} is not empty; choose a new folder")
+    for name in PROJECT_FILES:
+        (target / name).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(template / name, target / name)
+    if args.example:
+        shutil.copyfile(FIRMWARE / "examples" / args.example / "app.c", target / "main" / "app.c")
+    (target / ".gitignore").write_text(PROJECT_IGNORE, encoding="utf-8")
+    (target / "README.md").write_text(PROJECT_README.format(name=target.name), encoding="utf-8")
+    committed = git_commit(target, "New SDP project" + (f" from example {args.example}" if args.example else ""))
+    emit("project", path=str(target), example=args.example, git=committed, edit=str(target / "main" / "app.c"),
+         next="edit main/app.c, then Build and upload in SynaptaCode (sdpo guide upload)")
+    return 0
+
+
+def check(name, ok, detail, fix=None, required=True):
+    emit("check", name=name, ok=ok, required=required, detail=detail, **({"fix": fix} if fix and not ok else {}))
+    return ok or not required
+
+
+def doctor(args):
+    """Checks what each task needs and says how to fix what is missing; exits 1 when a required part fails."""
+    template = FIRMWARE / "sdp-ota"
+    results = [
+        check("python", True, f"{sys.executable} {sys.version.split()[0]}"),
+        check("pyserial", importlib.util.find_spec("serial") is not None, "USB pairing and setup",
+              f"{sys.executable} -m pip install pyserial"),
+        check("esptool", bool(os.environ.get("SDP_ESPTOOL")) or importlib.util.find_spec("esptool") is not None,
+              "installing firmware over USB (setup, install)", f"{sys.executable} -m pip install esptool", required=False),
+        check("git", bool(shutil.which("git")), "new projects and builds from SynaptaCode", "install Git for Windows"),
+        check("template", (template / "main" / "app.c").is_file(), str(template), "use a complete SDP checkout"),
+    ]
+    if args.project:
+        project = args.project.resolve()
+        ok = (project / "main" / "app.c").is_file()
+        results.append(check("project", ok, str(project), "create it with: sdpo new FOLDER"))
+        if ok:
+            # A project keeps the SDP files it was made with; building an older copy downgrades the board's protocol.
+            stale = [name for name in PROTOCOL_FILES
+                     if not (project / name).is_file() or (project / name).read_bytes() != (template / name).read_bytes()]
+            results.append(check("project_protocol", not stale, "SDP files match this checkout" if not stale
+                                 else "older SDP files: " + ", ".join(stale), f"sdpo new {project} --refresh",
+                                 required=False))
+    if args.key_dir:
+        keys = sorted(path.stem for path in args.key_dir.glob("*.txt") if DEVICE.fullmatch(path.stem))
+        results.append(check("keys", bool(keys), f"{len(keys)} paired board(s) in {args.key_dir}",
+                             "pair a board over USB first (sdpo guide board)"))
+        found = find_boards(device_ids=keys) if keys else {}
+        for key in keys:
+            board = found.get(key)
+            check("board", board is not None, f"{key} " + (f"online at {board['address']}" if board else "not answering"),
+                  "power the board and keep it on the same Wi-Fi as this computer", required=False)
+    emit("doctor", ok=all(results))
+    return 0 if all(results) else 1
+
+
 def identifier(text):
     if not IDENTIFIER.fullmatch(text) or RESERVED.fullmatch(text):
         raise argparse.ArgumentTypeError("expected a valid SynaptaCode identifier")
@@ -552,6 +698,9 @@ def network_port(text):
 
 
 EXAMPLES = """common tasks (sdpo = sdpo.cmd on Windows, ./sdpo elsewhere):
+  sdpo guide                                    how to use SDP, step by step (Thai)
+  sdpo doctor --key-dir KEYS                    check this computer and the paired boards
+  sdpo new blink --example blink                new project; write the program in blink/main/app.c
   sdpo ports                                    find the board's USB port
   sdpo setup --port COM3 --firmware fw.zip --key-dir KEYS --ssid "My Wi-Fi" --no-backup
                                                 new board: install, pair, join Wi-Fi
@@ -621,6 +770,16 @@ def main():
     finder.add_argument("--device-id", type=device_id, action="append", default=[],
                         help="also find this paired board (repeatable); paired boards skip the plain scan")
     commands.add_parser("ports")
+    reader = commands.add_parser("guide", help="how to use SDP (plain text)")
+    reader.add_argument("topic", nargs="?", default="start", help="start, board, code, upload, trouble, agent or all")
+    creator = commands.add_parser("new", help="new firmware project from the template")
+    creator.add_argument("folder", nargs="?", type=Path)
+    creator.add_argument("--example", help="start from an example's app.c (see --list)")
+    creator.add_argument("--list", action="store_true", help="list the examples")
+    creator.add_argument("--refresh", action="store_true", help="update an existing project's SDP files; keeps app.c")
+    checker = commands.add_parser("doctor", help="check what SDP needs on this computer")
+    checker.add_argument("--key-dir", type=Path, help="also check the boards paired here")
+    checker.add_argument("--project", type=Path, help="also check a project folder")
     args = parser.parse_args()
     if args.command == "upload":
         if args.timeout <= 0:
@@ -633,6 +792,12 @@ def main():
             return discover(args)
         if args.command == "ports":
             return list_ports()
+        if args.command == "guide":
+            return show_guide(args)
+        if args.command == "new":
+            return new_project(args)
+        if args.command == "doctor":
+            return doctor(args)
         if args.command == "install":
             install(args)
             return 0

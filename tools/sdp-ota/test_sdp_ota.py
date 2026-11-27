@@ -206,5 +206,58 @@ class TestShell(unittest.TestCase):
         self.assertIn('"type":"unpaired"', output.getvalue())
 
 
+class TestHelpers(unittest.TestCase):
+    def test_every_guide_topic_named_in_the_cli_help_exists(self):
+        _, topics = ota.guide_topics()
+        self.assertEqual(list(topics), ["start", "board", "code", "upload", "trouble", "agent"])
+        for topic in topics:
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(ota.show_guide(argparse.Namespace(topic=topic)), 0)
+            self.assertIn("## " + topic + ":", output.getvalue())
+
+    def make_firmware(self, root):
+        template = root / "sdp-ota"
+        for name in ota.PROJECT_FILES:
+            (template / name).parent.mkdir(parents=True, exist_ok=True)
+            (template / name).write_text("template " + name, encoding="utf-8")
+        (root / "examples" / "blink").mkdir(parents=True)
+        (root / "examples" / "blink" / "app.c").write_text("// Blink the LED\n", encoding="utf-8")
+        return template
+
+    def test_new_project_takes_the_example_and_refresh_keeps_the_program(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            template = self.make_firmware(root / "firmware")
+            project = root / "blink"
+            args = argparse.Namespace(list=False, folder=project, example="blink", refresh=False)
+            with patch.object(ota, "FIRMWARE", root / "firmware"), patch.object(ota, "git_commit", return_value=True), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(ota.new_project(args), 0)
+                self.assertEqual((project / "main" / "app.c").read_text(encoding="utf-8"), "// Blink the LED\n")
+                with self.assertRaises(ota.OtaError):  # never writes into a folder that has files
+                    ota.new_project(args)
+                (project / "main" / "app.c").write_text("my program", encoding="utf-8")
+                (template / "main" / "sdp_ota.c").write_text("newer protocol", encoding="utf-8")
+                self.assertEqual(ota.new_project(argparse.Namespace(list=False, folder=project, example=None, refresh=True)), 0)
+            self.assertEqual((project / "main" / "sdp_ota.c").read_text(encoding="utf-8"), "newer protocol")
+            self.assertEqual((project / "main" / "app.c").read_text(encoding="utf-8"), "my program")
+
+    def test_doctor_flags_a_project_with_older_sdp_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            template = self.make_firmware(root / "firmware")
+            project = root / "old"
+            for name in ota.PROJECT_FILES:
+                (project / name).parent.mkdir(parents=True, exist_ok=True)
+                (project / name).write_bytes((template / name).read_bytes())
+            (project / "main" / "sdp_ota.c").write_text("older protocol", encoding="utf-8")
+            with patch.object(ota, "FIRMWARE", root / "firmware"), contextlib.redirect_stdout(io.StringIO()) as output:
+                ota.doctor(argparse.Namespace(project=project, key_dir=None))
+            stale = next(json.loads(line) for line in output.getvalue().splitlines() if '"project_protocol"' in line)
+            self.assertFalse(stale["ok"])
+            self.assertIn("main/sdp_ota.c", stale["detail"])
+            self.assertIn("--refresh", stale["fix"])
+
+
 if __name__ == "__main__":
     unittest.main()

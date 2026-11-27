@@ -28,6 +28,7 @@
 #include "mbedtls/md.h"
 #include "mbedtls/sha256.h"
 #include "nvs_flash.h"
+#include "sdp_app.h"
 
 #define ID_SIZE 97
 #define NONCE_SIZE 33
@@ -586,6 +587,13 @@ static void load_identity(void)
     paired = nvs_get_u8(identity_store, "paired", &flag) == ESP_OK && flag == 1;
 }
 
+// Runs the program from app.c. A FreeRTOS task must not return, so it ends itself if app_start does.
+static void app_task(void *arg)
+{
+    app_start();
+    vTaskDelete(NULL);
+}
+
 void app_main(void)
 {
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -616,6 +624,7 @@ void app_main(void)
     bool configured = nvs_get_blob(ota_store, "wifi", &config, &size) == ESP_OK && size == sizeof(config);
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 2048, 0, 0, NULL, 0));
     configASSERT(xTaskCreate(usb_task, "sdp_usb", 4096, NULL, 5, NULL) == pdPASS);
+    configASSERT(xTaskCreate(app_task, "app", 4096, NULL, 1, NULL) == pdPASS);
     bool healthy = configured && start_wifi() == ESP_OK;
     if (healthy) {
         configASSERT(xTaskCreate(discovery_task, "sdp_discovery", 3072, NULL, 4, NULL) == pdPASS);

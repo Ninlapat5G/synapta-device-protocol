@@ -1,5 +1,6 @@
-idf_component_register(SRCS "sdp_ota.c" INCLUDE_DIRS "."
-    PRIV_REQUIRES app_update bootloader_support esp_driver_uart esp_event esp_hw_support esp_http_server esp_netif esp_wifi esp_timer json lwip mbedtls nvs_flash spi_flash)
+# app.c is the owner's program; "driver" gives it every ESP-IDF peripheral driver (GPIO, LEDC, I2C ...).
+idf_component_register(SRCS "sdp_ota.c" "app.c" INCLUDE_DIRS "."
+    PRIV_REQUIRES app_update bootloader_support driver esp_driver_uart esp_event esp_hw_support esp_http_server esp_netif esp_wifi esp_timer json lwip mbedtls nvs_flash spi_flash)
 foreach(name IN ITEMS SDP_PROJECT_ID SDP_BUILD_ID)
     if(NOT DEFINED ${name} OR NOT "${${name}}" MATCHES "^[a-z0-9][a-z0-9_-]*$")
         message(FATAL_ERROR "Set ${name} to a valid SynaptaCode identifier")

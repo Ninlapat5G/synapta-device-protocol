@@ -8,7 +8,36 @@ The module manifest is [tools/sdp-ota/module.json](../tools/sdp-ota/module.json)
 
 The host stores device addresses and pairing credentials on the upload machine. Agents work with device and build IDs. The host resolves authorized input through its device registry and preserves the resulting verified, failed, rolled back, or unknown outcome in upload history.
 
-## Build on app01
+## The owner's program
+
+People new to SDP start from [tools/sdp-ota/GUIDE.md](../tools/sdp-ota/GUIDE.md) (Thai, step by step). `sdpo guide`, SynaptaCode's Firmware page and the agent tool `sdp_ota_guide` all show that file.
+
+The board's own program lives in `main/app.c` as `void app_start(void)`, declared in `main/sdp_app.h`. `sdp_ota.c` runs it once in its own task (`app`, 4 KiB stack, priority 1) right after the USB task. That is before Wi-Fi starts and before a pending build is confirmed. So a program that crashes at start-up rolls the board back. A program that loops must call `vTaskDelay`, or Wi-Fi and the next upload stall. `main/CMakeLists.txt` requires `driver`, so every ESP-IDF peripheral header works without CMake changes.
+
+`sdpo new FOLDER [--example NAME]` copies the project template, and optionally an example's `app.c` from `firmware/esp-idf/examples/`. It writes a `.gitignore` and README and makes the first Git commit. `sdpo new --list` lists the examples. A project keeps the SDP files it was made with, so `sdpo new FOLDER --refresh` copies this checkout's protocol files in again. It keeps `app.c` and `main/CMakeLists.txt`. `sdpo doctor --project FOLDER` reports a project whose SDP files differ from the checkout.
+
+`sdpo doctor [--key-dir KEYS] [--project FOLDER]` prints one `check` record per requirement, each with a `fix` when it fails. Python, pyserial, Git, the template, the key folder and the project are required; esptool and boards answering on the network are only reported. The final `doctor` record has `ok`, and the exit code is 1 when a required check fails.
+
+## Build and upload from SynaptaCode
+
+SynaptaCode's **Build and upload** (Firmware page, Syn's and the agents' `sdp_ota_build_upload`) runs these steps:
+
+1. The board's source folder is captured as it is on disk, uncommitted edits included. A temporary index and `git commit-tree` leave the owner's branch untouched; `refs/synapta/builds/<buildId>` keeps the commit.
+2. That commit is archived into firmware storage like any build.
+3. The archive and [tools/sdp-ota/sdp-build.ps1](../tools/sdp-ota/sdp-build.ps1) go to the build machine over Synapta Connect, and the script runs there. It reuses one source and build folder per project, so a later build takes about a minute instead of five.
+4. The script prints one JSON line, either `{"type":"built",...}` or `{"type":"build_failed","errors":[...],"tail":[...]}`. Error lines are written relative to the project, for example `main/app.c:15:9: error: ...`.
+5. A built image is fetched to `<artifactRoot>/<projectId>/<buildId>/sdp_ota.bin` and uploaded over Wi-Fi.
+
+Build IDs look like `b20261128-221530`. The build machine is set once in SynaptaCode's `sdp-ota.json`:
+
+```json
+"builder": { "device": "Windows 10 Server 2016", "idf": "C:\\Nin\\esp-idf\\idf.cmd",
+             "signingKey": "C:\\Nin\\esp-idf\\sdp-ota\\bench-signing-key.pem", "workRoot": "C:\\Nin\\esp-idf\\sdp-builds" }
+```
+
+The build machine runs Windows with ESP-IDF, and the caller needs command access to it in Synapta Connect. The signing key never leaves that machine. Keep `sdp-build.ps1` ASCII, since Windows PowerShell 5.1 reads a file without a BOM in the ANSI code page.
+
+## Build on app01 by hand
 
 Compile the exact source archive chosen in SynaptaCode. Use a new build folder for each build. The signing key stays under server access control outside Git and the source archive. Use the same trusted signer for USB bootstrap and later builds. For a fresh test signer, generate an ECDSA key with the ESP-IDF Python environment using `python -m espsecure generate_signing_key --version 1 PATH`. Set the key's absolute path in a server-local SDK configuration defaults file using `CONFIG_SECURE_BOOT_SIGNING_KEY="C:/path/ota-signing-key.pem"`. Pass both defaults files to ESP-IDF with `-D "SDKCONFIG_DEFAULTS=sdkconfig.defaults;C:/path/signing.defaults"`.
 
@@ -20,9 +49,12 @@ Later builds of the same project use a new `SDP_BUILD_ID`. OTA takes only the si
 
 ## The `sdpo` tool
 
-`tools/sdp-ota/sdpo.cmd` (Windows) and `tools/sdp-ota/sdpo` (Linux, macOS) run the uploader. Every command prints NDJSON on stdout, so people and agents read the same records, and `sdpo --help` lists the common tasks. It needs Python 3.11 or newer with pyserial; `install` and `setup` also need esptool (`python -m pip install esptool`, or set `SDP_ESPTOOL` to a folder that holds it).
+`tools/sdp-ota/sdpo.cmd` (Windows) and `tools/sdp-ota/sdpo` (Linux, macOS) run the uploader. Every command except `guide` prints NDJSON on stdout, so people and agents read the same records, and `sdpo --help` lists the common tasks. `guide` prints the guide as UTF-8 text. It needs Python 3.11 or newer with pyserial; `install` and `setup` also need esptool (`python -m pip install esptool`, or set `SDP_ESPTOOL` to a folder that holds it).
 
 ```powershell
+sdpo guide [topic]                                            # how to use SDP (Thai, plain text)
+sdpo doctor --key-dir KEYS --project FOLDER                   # what is missing on this computer
+sdpo new FOLDER --example blink                               # new project; the program is main/app.c
 sdpo ports                                                    # USB serial ports
 sdpo setup --port COM3 --firmware fw.zip --key-dir KEYS --ssid "My Wi-Fi" --no-backup
 sdpo discover                                                 # new (unpaired) boards on the network
