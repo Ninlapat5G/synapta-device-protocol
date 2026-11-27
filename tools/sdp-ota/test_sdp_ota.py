@@ -171,6 +171,40 @@ class TestShell(unittest.TestCase):
             ota.resolve_board(args)
         self.assertEqual((args.host, args.key_file), ("192.0.2.9", Path("keys") / ("a" * 16 + ".txt")))
 
+    def test_probes_match_the_firmware_strings_byte_for_byte(self):
+        # The firmware compares whole datagrams with strcmp, so spacing or key order would hide a paired board.
+        self.assertEqual(ota.probes(["a" * 16]),
+                         [b'{"probe":"synapta-sdp"}', b'{"probe":"synapta-sdp","deviceId":"' + b"a" * 16 + b'"}'])
+
+    def test_unpair_signs_the_current_challenge_and_device(self):
+        key = bytes(range(32))
+        status = {"deviceId": "a" * 16, "projectId": "p", "challenge": "c" * 32}
+        sent = {}
+
+        class Connection:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def request(self, method, path, headers):
+                sent.update(method=method, path=path, headers=headers)
+
+            def close(self):
+                pass
+
+        args = argparse.Namespace(host="192.0.2.9", port=52410, device_id="a" * 16, key_file=Path("k"), key_dir=None)
+        with (
+            patch.object(ota, "read_key", return_value=key),
+            patch.object(ota, "get_status", return_value=status),
+            patch.object(ota, "HTTPConnection", Connection),
+            patch.object(ota, "checked_response", return_value=(200, {"status": "unpaired"})),
+            contextlib.redirect_stdout(io.StringIO()) as output,
+        ):
+            self.assertEqual(ota.unpair(args), 0)
+        self.assertEqual((sent["method"], sent["path"]), ("POST", "/v1/unpair"))
+        self.assertEqual(sent["headers"]["X-SDP-Nonce"], "c" * 32)
+        self.assertEqual(sent["headers"]["X-SDP-Auth"], ota.mac(key, "unpair", "c" * 32, "a" * 16))
+        self.assertIn('"type":"unpaired"', output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

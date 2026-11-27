@@ -25,10 +25,12 @@ Later builds of the same project use a new `SDP_BUILD_ID`. OTA takes only the si
 ```powershell
 sdpo ports                                                    # USB serial ports
 sdpo setup --port COM3 --firmware fw.zip --key-dir KEYS --ssid "My Wi-Fi" --no-backup
-sdpo discover                                                 # boards on the network
+sdpo discover                                                 # new (unpaired) boards on the network
+sdpo discover --device-id ID                                  # where a paired board is now
 sdpo status --device-id ID --key-dir KEYS
 sdpo upload --device-id ID --key-dir KEYS --image sdp_ota.bin
 sdpo install --port COM3 --firmware fw.zip --backup old-flash.bin
+sdpo unpair --device-id ID --key-dir KEYS                     # end the pairing
 ```
 
 - `setup` is the one step for a new board: install over USB, pair, join Wi-Fi and wait until the board answers on the network. `--firmware` takes the ESP-IDF build folder or a ZIP holding `flasher_args.json` and the files it lists (a flat ZIP is fine). The tool refuses an image without the SDP descriptor, since the board would lose wireless updates.
@@ -55,9 +57,16 @@ sdpo info --port COM3
 
 `wifi` sets the network without pairing. `info` shows the current `ipv4` address and whether the board is `paired`. The board opens its OTA endpoint only after pairing. Key files from older firmware (32 hex characters, host-generated) are still accepted by `status` and `upload`.
 
+`unpair` ends the pairing from the host that holds the key. The host signs `unpair`, the board's current challenge and its ID; the board then clears its paired flag and restarts. It then answers scans for new boards again and closes OTA. The secret, and so the ID, stays, so pairing again over USB writes the same key. The key file is left in place; delete it if the board is gone for good.
+
 ## Discovery
 
-A board on the network answers the UDP datagram `{"probe":"synapta-sdp"}` on port `52404` with `{"protocol":"sdp/v1","deviceId","projectId","paired","port"}`. Status and builds stay behind the authenticated endpoint. `sdpo.cmd discover` lists boards as NDJSON `device` records with their current address. It sends the probe from every local IPv4 address, since Windows sends a plain broadcast through one adapter only.
+Boards listen on UDP port `52404` and reply `{"protocol":"sdp/v1","deviceId","projectId","paired","port"}`. Status and builds stay behind the authenticated endpoint.
+
+- `{"probe":"synapta-sdp"}` is a scan for new boards. From 0.2.2 only an unpaired board answers it, so a paired board stops announcing itself until it is unpaired.
+- `{"probe":"synapta-sdp","deviceId":"<ID>"}` reaches one board whether paired or not, so its host still learns a new DHCP address. The board compares the whole datagram, so send exactly this text: no spaces, keys in this order.
+
+Hosts send the plain probe plus one named probe per board they hold a key for (boards on 0.2.1 answer only the plain one). `sdpo discover` lists answers as NDJSON `device` records with their current address; add `--device-id ID` for each paired board to find. `status` and `upload` without `--host` send the named probe themselves. It sends the probe from every local IPv4 address, since Windows sends a plain broadcast through one adapter only.
 
 ## SynaptaCode and agent calls
 

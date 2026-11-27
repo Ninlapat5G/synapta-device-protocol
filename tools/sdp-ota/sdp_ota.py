@@ -183,7 +183,7 @@ def resolve_board(args):
     if not args.host:
         if not args.device_id:
             raise OtaError("give --device-id (the address is then found on the network) or --host")
-        board = find_boards(timeout=2.0).get(args.device_id)
+        board = find_boards(timeout=2.0, device_ids=[args.device_id]).get(args.device_id)
         if not board:
             raise OtaError("board not found on the network; check that it is powered and on Wi-Fi")
         args.host, args.port = board["address"], board["port"]
@@ -329,12 +329,20 @@ def local_addresses():
         return []
 
 
-def find_boards(address=None, timeout=1.5):
-    """Broadcasts the SDP probe and returns {deviceId: board} for each board that answers.
+def probes(device_ids):
+    """The plain probe reaches unpaired boards (and v0.2.1 firmware); a paired board answers only a probe
+    that names its ID, so each known board gets its own."""
+    return [DISCOVERY_PROBE, *(json.dumps({"probe": "synapta-sdp", "deviceId": board}, separators=(",", ":")).encode()
+                               for board in device_ids)]
+
+
+def find_boards(address=None, timeout=1.5, device_ids=()):
+    """Broadcasts the SDP probes and returns {deviceId: board} for each board that answers.
 
     Windows sends 255.255.255.255 out of one adapter only (often a VPN such as Radmin or Tailscale),
     so the probe goes out once per local IPv4 address from a socket bound to it."""
     sockets = []
+    messages = probes(device_ids)
     try:
         for local in ([""] if address else ["", *local_addresses()]):
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -342,7 +350,8 @@ def find_boards(address=None, timeout=1.5):
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             try:
                 sock.bind((local, 0))
-                sock.sendto(DISCOVERY_PROBE, (address or "255.255.255.255", DISCOVERY_PORT))
+                for message in messages:
+                    sock.sendto(message, (address or "255.255.255.255", DISCOVERY_PORT))
             except OSError:
                 continue
         found = {}
@@ -372,8 +381,32 @@ def find_boards(address=None, timeout=1.5):
 
 
 def discover(args):
-    for board in find_boards(args.address, args.timeout).values():
+    for board in find_boards(args.address, args.timeout, args.device_id).values():
         emit("device", **board)
+    return 0
+
+
+def unpair(args):
+    """Ends the pairing on the board itself, so it answers scans for new boards again. The key file is
+    left in place: the board keeps its secret, and pairing again over USB writes the same key."""
+    resolve_board(args)
+    key = read_key(args.key_file)
+    status = get_status(args.host, args.port, key)
+    if status["deviceId"] != args.device_id:
+        raise OtaError("the board at this address has a different ID")
+    nonce = status["challenge"]
+    connection = HTTPConnection(args.host, args.port, timeout=5)
+    try:
+        connection.request("POST", "/v1/unpair", headers={
+            "X-SDP-Nonce": nonce, "X-SDP-Auth": mac(key, "unpair", nonce, args.device_id),
+            "Content-Length": "0", "Connection": "close",
+        })
+        code, reply = checked_response(connection, key, nonce)
+    finally:
+        connection.close()
+    if code != 200 or not isinstance(reply, dict) or reply.get("status") != "unpaired":
+        raise OtaError(f"board refused to unpair: {reply.get('error') if isinstance(reply, dict) else reply}")
+    emit("unpaired", deviceId=args.device_id, projectId=status["projectId"])
     return 0
 
 
@@ -490,7 +523,7 @@ def setup_board(args):
         identity = usb_info(connection)
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        board = find_boards(timeout=2.0).get(identity["deviceId"])
+        board = find_boards(timeout=2.0, device_ids=[identity["deviceId"]]).get(identity["deviceId"])
         if board:
             emit("ready", **board)
             return 0
@@ -522,12 +555,14 @@ EXAMPLES = """common tasks (sdpo = sdpo.cmd on Windows, ./sdpo elsewhere):
   sdpo ports                                    find the board's USB port
   sdpo setup --port COM3 --firmware fw.zip --key-dir KEYS --ssid "My Wi-Fi" --no-backup
                                                 new board: install, pair, join Wi-Fi
-  sdpo discover                                 boards on the network
+  sdpo discover                                 new (unpaired) boards on the network
+  sdpo discover --device-id ID                  where a paired board is now
   sdpo status --device-id ID --key-dir KEYS     what a board runs
   sdpo upload --device-id ID --key-dir KEYS --image sdp_ota.bin
                                                 update over Wi-Fi (IDs read from the image)
   sdpo install --port COM3 --firmware fw.zip --backup old.bin
                                                 reinstall or recover over USB
+  sdpo unpair --device-id ID --key-dir KEYS     end the pairing; the board shows in scans again
 """
 
 
@@ -535,8 +570,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                      epilog=EXAMPLES)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("status", "upload"):
-        network = commands.add_parser(name, help="read the running build" if name == "status" else "send a build over Wi-Fi")
+    for name in ("status", "unpair", "upload"):
+        network = commands.add_parser(name, help={"status": "read the running build", "unpair": "end the pairing",
+                                                  "upload": "send a build over Wi-Fi"}[name])
         network.add_argument("--device-id", type=device_id, help="board ID; finds the address when --host is not given")
         network.add_argument("--host", help="board address (default: discover it)")
         network.add_argument("--port", type=network_port, default=PORT)
@@ -582,6 +618,8 @@ def main():
     finder = commands.add_parser("discover")
     finder.add_argument("--address", help="ask one address instead of broadcasting")
     finder.add_argument("--timeout", type=float, default=1.5)
+    finder.add_argument("--device-id", type=device_id, action="append", default=[],
+                        help="also find this paired board (repeatable); paired boards skip the plain scan")
     commands.add_parser("ports")
     args = parser.parse_args()
     if args.command == "upload":
@@ -600,6 +638,8 @@ def main():
             return 0
         if args.command == "setup":
             return setup_board(args)
+        if args.command == "unpair":
+            return unpair(args)
         if args.command in {"usb-info", "info"}:
             with serial_port(args.port) as connection:
                 emit("usb_info", **usb_info(connection))

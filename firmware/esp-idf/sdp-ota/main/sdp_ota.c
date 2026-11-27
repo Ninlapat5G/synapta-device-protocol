@@ -277,6 +277,32 @@ static esp_err_t update_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Ends the pairing from the host that holds the key: the board forgets it is paired, closes OTA and
+// answers scans for new boards again. The secret (and so the ID) stays; pairing again needs USB.
+static esp_err_t unpair_handler(httpd_req_t *req)
+{
+    char nonce[NONCE_SIZE], auth[HASH_SIZE], message[96];
+    if (httpd_req_get_hdr_value_str(req, "X-SDP-Nonce", nonce, sizeof(nonce)) != ESP_OK ||
+        httpd_req_get_hdr_value_str(req, "X-SDP-Auth", auth, sizeof(auth)) != ESP_OK ||
+        strcmp(nonce, challenge)) {
+        return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Invalid unpair request");
+    }
+    snprintf(message, sizeof(message), "unpair\n%s\n%s", nonce, device_id);
+    if (!authenticate(message, auth)) {
+        return httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Invalid unpair request");
+    }
+    random_nonce(challenge);
+    esp_err_t erased = nvs_erase_key(identity_store, "paired");
+    if ((erased != ESP_OK && erased != ESP_ERR_NVS_NOT_FOUND) || nvs_commit(identity_store) != ESP_OK) {
+        return signed_response(req, nonce, 400, "{\"error\":\"pairing_storage\"}");
+    }
+    signed_response(req, nonce, 200, "{\"status\":\"unpaired\"}");
+    // Restart so discovery, OTA and the pairing flag all come back in the unpaired state together.
+    vTaskDelay(pdMS_TO_TICKS(400));
+    esp_restart();
+    return ESP_OK;
+}
+
 static esp_err_t start_ota_http(void)
 {
     httpd_config_t options = HTTPD_DEFAULT_CONFIG();
@@ -291,9 +317,13 @@ static esp_err_t start_ota_http(void)
     }
     const httpd_uri_t status = {.uri = "/v1/status", .method = HTTP_GET, .handler = status_handler};
     const httpd_uri_t update = {.uri = "/v1/ota", .method = HTTP_POST, .handler = update_handler};
+    const httpd_uri_t unpair = {.uri = "/v1/unpair", .method = HTTP_POST, .handler = unpair_handler};
     result = httpd_register_uri_handler(server, &status);
     if (result == ESP_OK) {
         result = httpd_register_uri_handler(server, &update);
+    }
+    if (result == ESP_OK) {
+        result = httpd_register_uri_handler(server, &unpair);
     }
     if (result != ESP_OK) {
         httpd_stop(server);
@@ -349,8 +379,10 @@ static esp_err_t start_wifi(void)
     return ESP_OK;
 }
 
-// Answers {"probe":"synapta-sdp"} on UDP 52404 so hosts can list boards without typing an address.
-// The reply holds only identity and pairing state; status and builds stay behind the HMAC endpoint.
+// Answers on UDP 52404 so hosts can find boards without typing an address. The plain probe
+// {"probe":"synapta-sdp"} is a scan for new boards, so only an unpaired board answers it; a paired
+// board answers only {"probe":"synapta-sdp","deviceId":"<its ID>"}, which its host sends to learn a
+// new DHCP address. The reply holds only identity and pairing state; status stays behind the HMAC.
 static void discovery_task(void *unused)
 {
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -359,7 +391,8 @@ static void discovery_task(void *unused)
     if (sock < 0 || bind(sock, (struct sockaddr *)&local, sizeof(local)) < 0) {
         vTaskDelete(NULL);
     }
-    char probe[64], beacon[256];
+    char probe[64], beacon[256], targeted[64];
+    snprintf(targeted, sizeof(targeted), "{\"probe\":\"synapta-sdp\",\"deviceId\":\"%s\"}", device_id);
     int length = snprintf(beacon, sizeof(beacon), "{\"protocol\":\"sdp/v1\",\"deviceId\":\"%s\","
                           "\"projectId\":\"%s\",\"paired\":%s,\"port\":%d}",
                           device_id, SDP_PROJECT_ID, paired ? "true" : "false", HTTP_PORT);
@@ -371,7 +404,8 @@ static void discovery_task(void *unused)
             continue;
         }
         probe[got] = '\0';
-        if (!strcmp(probe, "{\"probe\":\"synapta-sdp\"}")) {
+        // paired never changes while running: pairing and unpairing both restart the board.
+        if ((!paired && !strcmp(probe, "{\"probe\":\"synapta-sdp\"}")) || !strcmp(probe, targeted)) {
             sendto(sock, beacon, length, 0, (struct sockaddr *)&from, from_size);
         }
     }
